@@ -1,0 +1,177 @@
+import argparse
+import utils
+import torch
+import torch.nn as nn
+import torchvision.datasets as dset
+import numpy as np
+import torch.backends.cudnn as cudnn
+from torch.autograd import Variable
+
+from model import TinyNetwork
+from genotypes import Structure
+from loss import trades_loss, madry_loss
+
+
+parser = argparse.ArgumentParser("cifar")
+parser.add_argument('--gpu', type=int, default=0, help='gpu device id')
+parser.add_argument('--data', type=str, default='/home/yuqi/data', help='location of the data corpus')
+parser.add_argument('--batch_size', type=int, default=64, help='batch size')
+parser.add_argument('--learning_rate', type=float, default=0.1, help='init learning rate')
+parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
+parser.add_argument('--weight_decay', type=float, default=1e-4, help='weight decay')
+parser.add_argument('--epochs', type=int, default=200, help='num of training epochs')
+parser.add_argument('--epsilon', type=float, default=0.031, help='perturbation')
+parser.add_argument('--num_steps', type=int, default=7, help='perturb number of steps')
+parser.add_argument('--step_size', type=float, default=0.01, help='perturb step size')
+parser.add_argument('--beta', type=float, default=6.0, help='regularization in TRADES')
+parser.add_argument('--adv_loss', type=str, default='pgd', help='experiment name')
+parser.add_argument('--cutout', action='store_true', default=True, help='use cutout')
+parser.add_argument('--cutout_length', type=int, default=16, help='cutout length')
+parser.add_argument('--drop_path_prob', type=float, default=0.0, help='drop path probability')
+parser.add_argument('--seed', type=int, default=0, help='random seed')
+parser.add_argument('--grad_clip', type=float, default=5, help='gradient clipping')
+args = parser.parse_args()
+
+
+def main():
+    np.random.seed(args.seed)
+    torch.cuda.set_device(args.gpu)
+    cudnn.benchmark = True
+    torch.manual_seed(args.seed)
+    cudnn.enabled = True
+    torch.cuda.manual_seed(args.seed)
+    print('gpu device: ', args.gpu)
+    print("args: ", args)
+
+    op = ['nor_conv_1x1', 'nor_conv_3x3', 'avg_pool_3x3', 'skip_connect', 'none']
+    code = [1, 1, 1, 3, 3, 0] #REP
+    #code = [3, 3, 3, 3, 3, 3] #DARTS
+    #code = [1, 3, 1, 3, 3, 3] #PDARTS
+    #code = [0, 2, 1, 0, 2, 2] #SDARTS
+    # code = [2, 3, 1, 3, 0, 2] #ADVRUSH
+    genotype = Structure(
+        [
+            ((op[code[0]], 0),),
+            ((op[code[1]], 0), (op[code[2]], 1)),
+            ((op[code[3]], 0), (op[code[4]], 1), (op[code[5]], 2))
+        ]
+    )
+    model = TinyNetwork(C=24, N=5, genotype=genotype, num_classes=10)
+    model = model.cuda()
+
+    criterion = nn.CrossEntropyLoss()
+    criterion = criterion.cuda()
+    optimizer = torch.optim.SGD(
+        model.parameters(),
+        args.learning_rate,
+        momentum=args.momentum,
+        weight_decay=args.weight_decay
+    )
+
+    train_transform, valid_transform = utils._data_transforms_cifar10(args)
+    train_data = dset.CIFAR10(root=args.data, train=True, download=True, transform=train_transform)
+    valid_data = dset.CIFAR10(root=args.data, train=False, download=True, transform=valid_transform)
+
+    train_queue = torch.utils.data.DataLoader(
+        train_data, batch_size=args.batch_size, shuffle=True, pin_memory=True)
+
+    valid_queue = torch.utils.data.DataLoader(
+        valid_data, batch_size=args.batch_size, shuffle=False, pin_memory=True)
+
+    best_acc = 0.0
+    for epoch in range(args.epochs):
+        adjust_learning_rate(optimizer, epoch)
+        model.drop_path_prob = args.drop_path_prob * epoch / args.epochs
+
+        train_acc, train_obj = train(train_queue, model, criterion, optimizer)
+        print('epoch: ', epoch, 'train_acc: ', train_acc)
+
+        valid_acc, valid_obj = infer(valid_queue, model, criterion)
+
+        if valid_acc > best_acc:
+            best_acc = valid_acc
+            torch.save(model.state_dict(), './model.pt')
+
+        print('valid_acc: ', valid_acc, 'best_acc: ', best_acc)
+
+
+def train(train_queue, model, criterion, optimizer):
+    objs = utils.AvgrageMeter()
+    top1 = utils.AvgrageMeter()
+    top5 = utils.AvgrageMeter()
+    model.train()
+
+    for step, (input, target) in enumerate(train_queue):
+        input = Variable(input).cuda(non_blocking=True)
+        target = Variable(target).cuda(non_blocking=True)
+
+        optimizer.zero_grad()
+        logits = model(input)
+        if args.adv_loss == 'pgd':
+            loss = madry_loss(
+                model,
+                input,
+                target,
+                optimizer,
+                step_size=args.step_size,
+                epsilon=args.epsilon,
+                perturb_steps=args.num_steps)
+        elif args.adv_loss == 'trades':
+            loss = trades_loss(model,
+                               input,
+                               target,
+                               optimizer,
+                               step_size=args.step_size,
+                               epsilon=args.epsilon,
+                               perturb_steps=args.num_steps,
+                               beta=args.beta,
+                               distance='l_inf')
+        loss.backward()
+        nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
+        optimizer.step()
+
+        prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
+        n = input.size(0)
+        objs.update(loss.data.item(), n)
+        top1.update(prec1.data.item(), n)
+        top5.update(prec5.data.item(), n)
+
+    return top1.avg, objs.avg
+
+
+def infer(valid_queue, model, criterion):
+    objs = utils.AvgrageMeter()
+    top1 = utils.AvgrageMeter()
+    top5 = utils.AvgrageMeter()
+    model.eval()
+
+    with torch.no_grad():
+        for step, (input, target) in enumerate(valid_queue):
+            input = Variable(input, requires_grad=False).cuda(non_blocking=True)
+            target = Variable(target, requires_grad=False).cuda(non_blocking=True)
+
+            logits = model(input)
+            loss = criterion(logits, target)
+
+            prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
+            n = input.size(0)
+            objs.update(loss.data.item(), n)
+            top1.update(prec1.data.item(), n)
+            top5.update(prec5.data.item(), n)
+
+    return top1.avg, objs.avg
+
+
+def adjust_learning_rate(optimizer, epoch):
+    lr = args.learning_rate
+    if epoch >= 99:
+        lr = args.learning_rate * 0.1
+    if epoch >= 149:
+        lr = args.learning_rate * 0.01
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+
+
+if __name__ == '__main__':
+    main()
+
