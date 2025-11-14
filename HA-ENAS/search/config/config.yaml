@@ -3,9 +3,9 @@ RNG_SEED: 2
 SPACE:
   NAME: 'camnas'
 LOADER:
-  DATASET: 'cifarn10_224'
+  DATASET: 'cifar-100-python'
   NUM_CLASSES: 10
-  DATA_PATH: "../data/CIFAR10"
+  DATA_PATH: "../datasets/cifar-100-python"
   BATCH_SIZE: 16
   NUM_WORKERS: 4
   USE_VAL: True
@@ -21,9 +21,7 @@ OPTIM:
   NESTEROV: True
 SUPERNET_CFG:
   RATIO: [ 3, 4, 6, 3 ]
-  SANDWICH_NUM: 5   #采样的子网数目 ，conv + att + mlp + 2 * 随机采样
-
-# logger的输出频率
+  SANDWICH_NUM: 5   
 PRINT_FREQ: 10
 
 CONV:
