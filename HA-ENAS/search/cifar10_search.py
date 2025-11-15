@@ -1,8 +1,13 @@
+
+import torch
+print("ANTES de cargar la red:")
+print(torch.cuda.is_available())
+
 import numpy as np
 
 from core.config import cfg
 import core.config as config
-from hanet.supernet import SuperHanet
+
 from runner.my_utils import *
 from datasets.cifar10_224 import Cifar224_data
 from datasets.cifar10_224 import Cifar224_atk_data
@@ -12,9 +17,14 @@ from logger.logging import get_logger
 from logger.logging import make_path
 from nsga2 import NDsort, F_distance, F_mating, P_generator, F_EnvironmentSelect
 from runner.Surrogate import get_2obj_value_predictor
+from hanet.supernet import SuperHanet
+
+print("DESPUÉS de importar SuperHanet:")
+print(torch.cuda.is_available())
 
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+#device = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = 'cpu'
 config.load_configs()
 
 # 数据集加载
@@ -33,7 +43,10 @@ logger = get_logger(exp_path + '/logger.log')
 print('EA_Search_surrogate')
 # 超网加载
 snet = SuperHanet(n_classes=cfg.LOADER.NUM_CLASSES)
-checkpoint = torch.load(cfg.CKPT_PTH)['state_dict']
+print(device)
+#checkpoint = torch.load(cfg.CKPT_PTH)['state_dict']
+checkpoint = torch.load(cfg.CKPT_PTH, map_location=torch.device('cpu'))['state_dict']
+
 snet.load_state_dict(checkpoint)
 snet.to(device)
 

@@ -207,21 +207,21 @@ class AccuracyPredictor(nn.Module):
 
 def get_clean_acc_predictor(device):
     predictor = AccuracyPredictor(hidden_size=200, n_layers=6, device=device)
-    ckpt = torch.load('checkpoints/predictor_ckpt/clean_ckpt.pth', map_location=device)
+    ckpt = torch.load('checkpoints/predictor_ckpt/clean_ckpt.pth', map_location='cpu')
     predictor.load_state_dict(ckpt['state_dict'])
     return predictor
 
 
 def get_black_robust_acc_predictor(device):
     predictor = AccuracyPredictor(hidden_size=200, n_layers=6, device=device)
-    ckpt = torch.load('checkpoints/predictor_ckpt/black_ckpt.pth', map_location=device)
+    ckpt = torch.load('checkpoints/predictor_ckpt/black_ckpt.pth', map_location='cpu')
     predictor.load_state_dict(ckpt['state_dict'])
     return predictor
 
 
 def get_white_robust_acc_predictor(device):
     predictor = AccuracyPredictor(hidden_size=200, n_layers=6, device=device)
-    ckpt = torch.load('checkpoints/predictor_ckpt/white_ckpt.pth', map_location=device)
+    ckpt = torch.load('checkpoints/predictor_ckpt/white_ckpt.pth', map_location='cpu')
     predictor.load_state_dict(ckpt['state_dict'])
     return predictor
 

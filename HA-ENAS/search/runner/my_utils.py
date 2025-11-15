@@ -14,7 +14,7 @@ import time
 # 2、train()和test()函数只需将相应参数传入即可
 # 3、data_plt()会将log里的数据读出并绘制图像
 
-def Cifar224_data(root='../dataset/CIFAR10', train_batch_size=64, test_batch_size=100):
+def Cifar224_data(root='/dataset/CIFAR10', train_batch_size=64, test_batch_size=100):
     # Data
     print('==> Preparing Cifar224 data..')
     transform_train = transforms.Compose([
