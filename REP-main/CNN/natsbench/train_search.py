@@ -15,7 +15,7 @@ from architect import Architect
 parser = argparse.ArgumentParser("cifar")
 parser.add_argument('--gpu', type=int, default=0, help='gpu device id')
 parser.add_argument('--epochs', type=int, default=10, help='num of training epochs')
-parser.add_argument('--data', type=str, default='/home/yuqi/data', help='location of the data corpus')
+parser.add_argument('--data', type=str, default='dataset', help='location of the data corpus')
 parser.add_argument('--batch_size', type=int, default=64, help='batch size')
 parser.add_argument('--learning_rate', type=float, default=0.1, help='init learning rate')
 parser.add_argument('--learning_rate_min', type=float, default=0.0, help='min learning rate')
