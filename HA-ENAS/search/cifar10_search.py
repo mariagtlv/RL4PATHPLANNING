@@ -205,12 +205,21 @@ if __name__ == "__main__":
         FunctionValue = get_object_value(PopSize, Population)
         FrontValue = NDsort.NDSort(-FunctionValue, PopSize)[0]
         CrowdDistance = F_distance.F_distance(FunctionValue, FrontValue)
+        print("No checkpoint available. Starting from scratch.")
     else:
         start_gen = ckpt["gen"] + 1
         Population = ckpt["Population"]
         FunctionValue = ckpt["FunctionValue"]
         FrontValue = ckpt["FrontValue"]
         CrowdDistance = ckpt["CrowdDistance"]
+        print(
+    f"Checkpoint available:\n"
+    f"  - Starting from generation: {start_gen}\n"
+    f"  - Population size: {len(Population)}\n"
+    f"  - FunctionValue entries: {len(FunctionValue)}\n"
+    f"  - Fronts detected: {len(FrontValue)}\n"
+    f"  - CrowdDistance entries: {len(CrowdDistance)}"
+        )
 
     #Population = np.random.randint(low=0, high=3, size=(PopSize, sum(cfg.SUPERNET_CFG.RATIO)), dtype='int')
     #FunctionValue = get_object_value(PopSize, Population)
