@@ -1,8 +1,6 @@
 
 import torch
-print("ANTES de cargar la red:")
-print(torch.cuda.is_available())
-
+import csv
 import numpy as np
 
 from core.config import cfg
@@ -18,10 +16,6 @@ from logger.logging import make_path
 from nsga2 import NDsort, F_distance, F_mating, P_generator, F_EnvironmentSelect
 from runner.Surrogate import get_2obj_value_predictor
 from hanet.supernet import SuperHanet
-
-print("DESPUÉS de importar SuperHanet:")
-print(torch.cuda.is_available())
-
 
 #device = 'cuda' if torch.cuda.is_available() else 'cpu'
 device = 'cpu'
@@ -41,15 +35,48 @@ exp_path = make_path('EA_Search_surrogate')
 logger = get_logger(exp_path + '/logger.log')
 
 print('EA_Search_surrogate')
-# 超网加载
-snet = SuperHanet(n_classes=cfg.LOADER.NUM_CLASSES)
-print(device)
-#checkpoint = torch.load(cfg.CKPT_PTH)['state_dict']
-checkpoint = torch.load(cfg.CKPT_PTH, map_location=torch.device('cpu'))['state_dict']
 
-snet.load_state_dict(checkpoint)
-snet.to(device)
+#NUEVO: guardar checkpoint para poder reanudar 
+def save_checkpoint(gen, Population, FunctionValue, FrontValue, CrowdDistance, exp_path):
+    ckpt = {
+        "gen": gen,
+        "Population": Population,
+        "FunctionValue": FunctionValue,
+        "FrontValue": FrontValue,
+        "CrowdDistance": CrowdDistance
+    }
+    ckpt_path = os.path.join(exp_path, f"checkpoint_gen_{gen}.pt")
+    torch.save(ckpt, ckpt_path)
+    print(f"[CHECKPOINT] Saved generation {gen} to {ckpt_path}")
 
+#NUEVO: cargar checkpoint
+def load_last_checkpoint(exp_path):
+    ckpts = [f for f in os.listdir(exp_path) if f.startswith("checkpoint_gen_")]
+    if not ckpts:
+        print("[CHECKPOINT] No checkpoint found. Starting from scratch.")
+        return None
+    
+    last = max(ckpts, key=lambda x: int(x.split("_")[2].split(".")[0]))
+    path = os.path.join(exp_path, last)
+
+    ckpt = torch.load(path, map_location="cpu")
+    print(f"[CHECKPOINT] Loaded checkpoint: {path}")
+    return ckpt
+
+#NUEVO: escribir datos de cada iteracion en un .csv
+def write_csv_row(exp_path, gen, best_values):
+    csv_path = os.path.join(exp_path, "results.csv")
+    
+    write_header = not os.path.exists(csv_path)
+
+    with open(csv_path, "a", newline="") as f:
+        writer = csv.writer(f)
+
+        if write_header:
+            writer.writerow(["Generation", "CleanAcc", "BlackAcc"])
+
+        for vals in best_values:
+            writer.writerow([gen, vals[0], vals[1]])
 
 # 把一维的编码转换为二维的列表编码
 def to_code(ncode):
@@ -156,15 +183,40 @@ def OffspringSelect(Population):
 
     return Population
 
+# 超网加载
+snet = SuperHanet(n_classes=cfg.LOADER.NUM_CLASSES)
+print(device)
+#checkpoint = torch.load(cfg.CKPT_PTH)['state_dict']
+checkpoint = torch.load(cfg.CKPT_PTH, map_location=torch.device('cpu'))['state_dict']
+
+snet.load_state_dict(checkpoint)
+snet.to(device)
 
 if __name__ == "__main__":
     Generations = 30
     PopSize = 50
-    Population = np.random.randint(low=0, high=3, size=(PopSize, sum(cfg.SUPERNET_CFG.RATIO)), dtype='int')
-    FunctionValue = get_object_value(PopSize, Population)
 
-    FrontValue = NDsort.NDSort(-FunctionValue, PopSize)[0]
-    CrowdDistance = F_distance.F_distance(FunctionValue, FrontValue)
+    #NUEVO: cargar ultimo checkpoint (el mas grande)
+    ckpt = load_last_checkpoint(exp_path)
+
+    if ckpt is None:
+        start_gen = 0
+        Population = np.random.randint(low=0, high=3, size=(PopSize, sum(cfg.SUPERNET_CFG.RATIO)), dtype='int')
+        FunctionValue = get_object_value(PopSize, Population)
+        FrontValue = NDsort.NDSort(-FunctionValue, PopSize)[0]
+        CrowdDistance = F_distance.F_distance(FunctionValue, FrontValue)
+    else:
+        start_gen = ckpt["gen"] + 1
+        Population = ckpt["Population"]
+        FunctionValue = ckpt["FunctionValue"]
+        FrontValue = ckpt["FrontValue"]
+        CrowdDistance = ckpt["CrowdDistance"]
+
+    #Population = np.random.randint(low=0, high=3, size=(PopSize, sum(cfg.SUPERNET_CFG.RATIO)), dtype='int')
+    #FunctionValue = get_object_value(PopSize, Population)
+
+    #FrontValue = NDsort.NDSort(-FunctionValue, PopSize)[0]
+    #CrowdDistance = F_distance.F_distance(FunctionValue, FrontValue)
 
     since = time.time()
 
@@ -187,6 +239,10 @@ if __name__ == "__main__":
         PopulationNon = Population[(FrontValue == 1)[0], :]
 
         logger.info(f'Gen :{Gene + 1}\t\t{FunctionValueNon[:3]}\n{PopulationNon[:3]}')
+
+        #NUEVO: guardar .csv y checkpoint
+        write_csv_row(exp_path, Gene, FunctionValueNon)
+        save_checkpoint(Gene, Population, FunctionValue, FrontValue, CrowdDistance, exp_path)
 
     np.set_printoptions(threshold=np.inf)
     logger.info(f'Gen :{Gene + 1}\t\t{FunctionValueNon}\n{PopulationNon}')
