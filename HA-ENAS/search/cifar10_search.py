@@ -230,6 +230,7 @@ if __name__ == "__main__":
     since = time.time()
 
     for Gene in range(Generations):
+        print(f'Gen: {Gene}')
         MatingPool = F_mating.F_mating(Population, FrontValue, CrowdDistance)
 
         # Offspring = P_generator.P_generator(MatingPool)
@@ -250,6 +251,7 @@ if __name__ == "__main__":
         logger.info(f'Gen :{Gene + 1}\t\t{FunctionValueNon[:3]}\n{PopulationNon[:3]}')
 
         #NUEVO: guardar .csv y checkpoint
+        print("Saving data")
         write_csv_row(exp_path, Gene, FunctionValueNon)
         save_checkpoint(Gene, Population, FunctionValue, FrontValue, CrowdDistance, exp_path)
 
