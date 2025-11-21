@@ -16,21 +16,53 @@ white_robust_model = putils.get_white_robust_acc_predictor(device)
 
 
 # 返回预测的clean和black_robust
-def get_2obj_value_predictor(pop):
+def get_2obj_value_predictor(pop, return_latent=False):
     x = putils.to_one_hot(pop)
     x = torch.tensor(x, dtype=torch.float)
     x = x.to(device)
     clean_model.eval()
     black_robust_model.eval()
-    y = clean_model(x)
 
+    if not return_latent:
+            y = clean_model(x)
+            z = black_robust_model(x)
+            y = y.cpu().detach().numpy()[:, np.newaxis]
+            z = z.cpu().detach().numpy()[:, np.newaxis]
+            return np.concatenate((y, z), axis=1)
+
+    clean_latent = []
+    black_latent = []
+
+    def hook_clean(module, input, output):
+        clean_latent.append(output.detach().cpu())
+
+    def hook_black(module, input, output):
+        black_latent.append(output.detach().cpu())
+
+    layer_clean = clean_model[-2] if isinstance(clean_model, torch.nn.Sequential) else list(clean_model.children())[-2]
+    layer_black = black_robust_model[-2] if isinstance(black_robust_model, torch.nn.Sequential) else list(black_robust_model.children())[-2]
+
+    h1 = layer_clean.register_forward_hook(hook_clean)
+    h2 = layer_black.register_forward_hook(hook_black)
+
+    y = clean_model(x)
     z = black_robust_model(x)
-    y = y.cpu().detach().numpy()
-    z = z.cpu().detach().numpy()
-    y = y[:, np.newaxis]
-    z = z[:, np.newaxis]
-    t = np.concatenate((y, z), axis=1)
-    return t
+
+    h1.remove()
+    h2.remove()
+
+    y = y.detach().cpu().numpy().reshape(-1, 1)
+    z = z.detach().cpu().numpy().reshape(-1, 1)
+
+
+    pred = np.concatenate((y, z), axis=1)
+
+    clean_latent = clean_latent[0].numpy() 
+    black_latent = black_latent[0].numpy()
+
+    latent = np.concatenate([clean_latent, black_latent], axis=1)
+
+    return pred, latent
 
 
 # 返回预测的 clean\black_robust\white_robust

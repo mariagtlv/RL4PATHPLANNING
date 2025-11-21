@@ -17,6 +17,11 @@ from nsga2 import NDsort, F_distance, F_mating, P_generator, F_EnvironmentSelect
 from runner.Surrogate import get_2obj_value_predictor
 from hanet.supernet import SuperHanet
 
+import pandas as pd
+import pyarrow.parquet as pq
+import pyarrow as pa
+
+
 #device = 'cuda' if torch.cuda.is_available() else 'cpu'
 device = 'cpu'
 config.load_configs()
@@ -35,6 +40,8 @@ exp_path = make_path('EA_Search_surrogate')
 logger = get_logger(exp_path + '/logger.log')
 
 print('EA_Search_surrogate')
+
+current_generation=0
 
 #NUEVO: guardar checkpoint para poder reanudar 
 def save_checkpoint(gen, Population, FunctionValue, FrontValue, CrowdDistance, exp_path):
@@ -77,6 +84,36 @@ def write_csv_row(exp_path, gen, best_values):
 
         for vals in best_values:
             writer.writerow([gen, vals[0], vals[1]])
+
+#NUEVO: añadir a un parquet sin sobrescribir
+def append_parquet(exp_path, rows, filename="model_evals.parquet"):
+    parquet_path = os.path.join(exp_path, filename)
+
+    df_new = pd.DataFrame(rows)
+
+    if not os.path.exists(parquet_path):
+        table = pa.Table.from_pandas(df_new)
+        pq.write_table(table, parquet_path)
+        return
+
+    existing = pq.ParquetFile(parquet_path)
+    with pq.ParquetWriter(parquet_path, existing.schema, use_dictionary=True) as writer:
+        writer.write_table(pa.Table.from_pandas(df_new))
+
+#NUEVO: guarda informacion sobre cada arquitectura evaluada
+def save_model_eval_parquet(exp_path, gen, arch, clean_acc, black_acc, pred_metrics=None, latent=None):
+    row = {
+        "generation": gen,
+        "architecture": arch.tolist(),
+        "clean_acc": clean_acc,
+        "black_acc": black_acc,
+        "pred_clean": pred_metrics[0] if pred_metrics is not None else None,
+        "pred_black": pred_metrics[1] if pred_metrics is not None else None,
+        "latent": latent.tolist() if latent is not None else None,
+        "timestamp": time.time(),
+    }
+    append_parquet(exp_path, [row])
+
 
 # 把一维的编码转换为二维的列表编码
 def to_code(ncode):
@@ -150,16 +187,49 @@ def get_object_value(Pop, input):
     st = time.time()
     # 目标函数  第0列 clean_acc  第1列 黑盒攻击 balck_atk_acc
     output = np.zeros((Pop, 2))
+
+    if exp_path is not None:
+        parquet_path = os.path.join(exp_path, "evaluated_individuals.parquet")
+
+    rows = []  
+
     for i, p in enumerate(input):
-        output[i][0] = clean_acc(p)
-        output[i][1] = blackbox_rob_acc(p)
+        clean = clean_acc(p)
+        black = blackbox_rob_acc(p)
+
+        output[i][0] = clean
+        output[i][1] = black
+
+        row = {
+            "id": i,
+            "timestamp": datetime.now().isoformat(),
+            "genes": p.tolist() if hasattr(p, "tolist") else list(p),
+            "clean_acc": clean,
+            "blackbox_acc": black,
+        }
+
+        rows.append(row)
+
+    if exp_path is not None:
+        df_new = pd.DataFrame(rows)
+
+        if os.path.exists(parquet_path):
+            df_old = pd.read_parquet(parquet_path)
+            df_all = pd.concat([df_old, df_new], ignore_index=True)
+        else:
+            df_all = df_new
+
+        df_all.to_parquet(parquet_path, index=False)
+        print(f"[PARQUET] Saved {len(rows)} evaluations → {parquet_path}")
+
     ed = time.time()
     print("total_time:", ed - st)
+
     return output
 
 
 def OffspringSelect(Population):
-    FunctionValue = get_2obj_value_predictor(Population)
+    FunctionValue, latent = get_2obj_value_predictor(Population, return_latent=True)
 
     FrontValue = NDsort.NDSort(-FunctionValue, PopSize)[0]
     CrowdDistance = F_distance.F_distance(FunctionValue, FrontValue)
@@ -229,7 +299,7 @@ if __name__ == "__main__":
 
     since = time.time()
 
-    for Gene in range(Generations):
+    for Gene in range(start_gen,Generations):
         print(f'Gen: {Gene}')
         MatingPool = F_mating.F_mating(Population, FrontValue, CrowdDistance)
 
