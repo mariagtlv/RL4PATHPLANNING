@@ -13,6 +13,9 @@ from torch.autograd import Variable
 from model_search import Network
 from architect import Architect
 
+import pandas as pd
+import os
+from datetime import datetime
 
 parser = argparse.ArgumentParser("cifar")
 parser.add_argument('--data', type=str, default='dataset', help='location of the data corpus')
@@ -38,6 +41,32 @@ args = parser.parse_args()
 
 CIFAR_CLASSES = 10
 
+#NUEVO: Guardar en .parquet la arquitectura encontrada con metricas y metadata
+def save_architecture_record(exp_path, epoch, genotype, valid_acc_fgsm, valid_acc_pgd, params_count):
+    parquet_path = os.path.join(exp_path, "rep_darts_results.parquet")
+
+    record = {
+        "timestamp": datetime.now().isoformat(),
+        "epoch": epoch,
+        "genotype_normal": str(genotype.normal),
+        "genotype_reduce": str(genotype.reduce),
+        "genotype_full": str(genotype),
+        "fgsm_acc": valid_acc_fgsm,
+        "pgd_acc": valid_acc_pgd,
+        "robustness": 0.5 * (valid_acc_fgsm + valid_acc_pgd),
+        "params": params_count,
+    }
+
+    df_new = pd.DataFrame([record])
+
+    if os.path.exists(parquet_path):
+        df_old = pd.read_parquet(parquet_path)
+        df_all = pd.concat([df_old, df_new], ignore_index=True)
+    else:
+        df_all = df_new
+
+    df_all.to_parquet(parquet_path, index=False)
+    print(f"[PARQUET] Achieved architecture saved → {parquet_path}")
 
 def main():
     np.random.seed(args.seed)
@@ -88,20 +117,36 @@ def main():
 
         genotype = model.genotype()
         print('genotype: ', genotype)
+
         if genotype not in archs:
             archs.append(genotype)
             print('perform validation!')
-            # validation
+
             valid_acc_fgsm, valid_obj_fgsm = infer(valid_queue, model, criterion, type='FGSM')
             valid_acc_pgd, valid_obj_pgd = infer(valid_queue, model, criterion, type='PGD')
-            robustness.append(0.5 * (valid_acc_fgsm + valid_acc_pgd))
-            print('robustness_fgsm: ', valid_acc_fgsm)
-            print('robustness_pgd: ', valid_acc_pgd)
+
+            robust = 0.5 * (valid_acc_fgsm + valid_acc_pgd)
+            robustness.append(robust)
+
+            params = sum(p.numel() for p in model.parameters())
+
+            exp_path = "rep_results"
+            os.makedirs(exp_path, exist_ok=True)
+
+            save_architecture_record(
+                exp_path=exp_path,
+                epoch=epoch,
+                genotype=genotype,
+                valid_acc_fgsm=valid_acc_fgsm,
+                valid_acc_pgd=valid_acc_pgd,
+                params_count=params
+            )
+
+            print('[INFO] Saved genotype + metrics in Parquet.')
 
         print(archs)
         print(robustness)
 
-        ### For Statistic ###
         dist = [0] * 16
         for i in range(len(archs) - 1):
             arch1 = archs[i]
