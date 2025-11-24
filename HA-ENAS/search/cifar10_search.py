@@ -114,6 +114,11 @@ def save_model_eval_parquet(exp_path, gen, arch, clean_acc, black_acc, pred_metr
     }
     append_parquet(exp_path, [row])
 
+#NUEVO: convertir arquitectura en clave hashtable
+def arch_key(p):
+    return tuple(p.tolist())
+
+
 
 # 把一维的编码转换为二维的列表编码
 def to_code(ncode):
@@ -191,27 +196,44 @@ def get_object_value(Pop, input):
     if exp_path is not None:
         parquet_path = os.path.join(exp_path, "evaluated_individuals.parquet")
 
-    rows = []  
+    #NUEVO: cargar arquitecturas evaluadas en .parquet
+    cache = {}
+    if os.path.exists(parquet_path):
+        df = pd.read_parquet(parquet_path)
+        for _, row in df.iterrows():
+            key = tuple(row["genes"]) 
+            cache[key] = (row["clean_acc"], row["blackbox_acc"])
+
+        print(f"[CACHE] Loaded {len(cache)} cached evaluations.")
+
+    rows_to_add = []  
 
     for i, p in enumerate(input):
-        clean = clean_acc(p)
-        black = blackbox_rob_acc(p)
 
-        output[i][0] = clean
-        output[i][1] = black
+        key = arch_key(p)
 
-        row = {
-            "id": i,
-            "timestamp": datetime.now().isoformat(),
-            "genes": p.tolist() if hasattr(p, "tolist") else list(p),
-            "clean_acc": clean,
-            "blackbox_acc": black,
-        }
+        if key in cache:
+            clean, black = cache[key]
+            output[i][0] = clean
+            output[i][1] = black
+            print(f"[CACHE HIT] Architecture already evaluated. clean={clean} black={black}")
+        else:
+            clean = clean_acc(p)
+            black = blackbox_rob_acc(p)
 
-        rows.append(row)
+            output[i][0] = clean
+            output[i][1] = black
 
-    if exp_path is not None:
-        df_new = pd.DataFrame(rows)
+            rows_to_add.append({
+                "id": i,
+                "timestamp": datetime.now().isoformat(),
+                "genes": p.tolist(),
+                "clean_acc": clean,
+                "blackbox_acc": black,
+            })
+
+    if rows_to_add:
+        df_new = pd.DataFrame(rows_to_add)
 
         if os.path.exists(parquet_path):
             df_old = pd.read_parquet(parquet_path)
@@ -220,7 +242,7 @@ def get_object_value(Pop, input):
             df_all = df_new
 
         df_all.to_parquet(parquet_path, index=False)
-        print(f"[PARQUET] Saved {len(rows)} evaluations → {parquet_path}")
+        print(f"[PARQUET] Added {len(rows_to_add)} new evaluations → {parquet_path}")
 
     ed = time.time()
     print("total_time:", ed - st)
