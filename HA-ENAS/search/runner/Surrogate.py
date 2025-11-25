@@ -37,8 +37,8 @@ def get_2obj_value_predictor(pop, return_latent=False):
     def hook_black(module, input, output):
         black_latent.append(output.detach().cpu())
 
-    cm = torch.nn.Sequential(*list(clean_model.children()))
-    bm = torch.nn.Sequential(*list(black_robust_model.children()))
+    cm = clean_model.layers
+    bm = black_robust_model.layers
 
     layer_clean = cm[-2]
     layer_black = bm[-2]
