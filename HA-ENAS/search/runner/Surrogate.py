@@ -26,7 +26,8 @@ def get_2obj_value_predictor(pop, return_latent=False):
     if not return_latent:
         y = clean_model(x)
         z = black_robust_model(x)
-        return np.concatenate((y.cpu().numpy()[:,None], z.cpu().numpy()[:,None]), axis=1)
+        return np.concatenate((y.detach().cpu().numpy()[:,None], z.detach().cpu().numpy()[:,None]), axis=1)
+
 
     clean_latent = []
     black_latent = []
