@@ -38,6 +38,8 @@ test_size = 10  # 只使用1/10的测试集数据
 # 创建工作路径和logger
 exp_path = make_path('EA_Search_surrogate')
 logger = get_logger(exp_path + '/logger.log')
+base_dir = os.getcwd()
+parquet_path = os.path.join(base_dir, "cache", "evaluated_individuals.parquet")
 
 print('EA_Search_surrogate')
 
@@ -86,8 +88,7 @@ def write_csv_row(exp_path, gen, best_values):
             writer.writerow([gen, vals[0], vals[1]])
 
 #NUEVO: añadir a un parquet sin sobrescribir
-def append_parquet(exp_path, rows, filename="model_evals.parquet"):
-    parquet_path = os.path.join(exp_path, filename)
+def append_parquet(rows, filename="model_evals.parquet"):
 
     df_new = pd.DataFrame(rows)
 
@@ -101,7 +102,7 @@ def append_parquet(exp_path, rows, filename="model_evals.parquet"):
         writer.write_table(pa.Table.from_pandas(df_new))
 
 #NUEVO: guarda informacion sobre cada arquitectura evaluada
-def save_model_eval_parquet(exp_path, gen, arch, clean_acc, black_acc, pred_metrics=None, latent=None):
+def save_model_eval_parquet( gen, arch, clean_acc, black_acc, pred_metrics=None, latent=None):
     row = {
         "generation": gen,
         "architecture": arch.tolist(),
@@ -112,7 +113,7 @@ def save_model_eval_parquet(exp_path, gen, arch, clean_acc, black_acc, pred_metr
         "latent": latent.tolist() if latent is not None else None,
         "timestamp": time.time(),
     }
-    append_parquet(exp_path, [row])
+    append_parquet(parquet_path, [row])
 
 #NUEVO: convertir arquitectura en clave hashtable
 def arch_key(p):
@@ -192,9 +193,6 @@ def get_object_value(Pop, input):
     st = time.time()
     # 目标函数  第0列 clean_acc  第1列 黑盒攻击 balck_atk_acc
     output = np.zeros((Pop, 2))
-
-    if exp_path is not None:
-        parquet_path = os.path.join(exp_path, "evaluated_individuals.parquet")
 
     #NUEVO: cargar arquitecturas evaluadas en .parquet
     cache = {}
