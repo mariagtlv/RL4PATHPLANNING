@@ -10,6 +10,7 @@ import time
 from torchvision.datasets import ImageFolder
 import torchattacks
 from torch.utils.data import DataLoader
+import pandas as pd 
 
 
 # 使用方法
@@ -109,6 +110,10 @@ def test(epoch, net, testloader, criterion, path, best_acc, logger, device='cpu'
     correct = 0
     total = 0
     start_time = time.time()
+
+    parquet_path = "./cache/test_log.parquet"
+    os.makedirs("./cache", exist_ok=True)
+
     with torch.no_grad():
         for batch, (inputs, targets) in enumerate(testloader):
             inputs, targets = inputs.to(device), targets.to(device)
@@ -120,18 +125,30 @@ def test(epoch, net, testloader, criterion, path, best_acc, logger, device='cpu'
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
 
-    current_time = time.time()
+            #NUEVO: guardado parcial en .parquet
+            row = {
+                "epoch": epoch,
+                "batch": batch,
+                "test_loss": float(test_loss / (batch + 1)),
+                "test_acc": float(correct / total),
+                "time": time.time() - start_time
+            }
+            df = pd.DataFrame([row])
+            df.to_parquet(parquet_path, append=True, engine="fastparquet")
+
+            #NUEVO: mensaje de proceso
+            print(f"[TEST] Epoch {epoch} | Batch {batch}/{len(testloader)} | "
+                  f"Loss {row['test_loss']:.4f} | Acc {row['test_acc']:.4f}")
+
     logger.info(
-        'Test Loss {:.4f}\tAccuracy {:2.2%}\t\tTime {:.2f}s\n'
-            .format(float(test_loss / (batch + 1)), float(correct / total), (current_time - start_time))
+        'Test Loss {:.4f}\tAccuracy {:2.2%}\tTime {:.2f}s'.format(
+            float(test_loss / (batch + 1)), float(correct / total), row["time"]
+        )
     )
 
-    # logger(path, f'Test: loss:{test_loss / (idx + 1)},acc:{correct / total}\n')
-
-    # 保存网络
     acc = correct / total
     if acc > best_acc:
-        print('Saving..')
+        print("Saving best model...")
         print(list(net.state_dict().keys())[0][:6])
         if list(net.state_dict().keys())[0][:6] == 'module':
             net_state_dict = net.module.state_dict()
@@ -145,6 +162,7 @@ def test(epoch, net, testloader, criterion, path, best_acc, logger, device='cpu'
         }
         torch.save(state, path + 'ckpt.pth')
         best_acc = acc
+
     return best_acc
 
 
@@ -275,16 +293,18 @@ def retrain(epoch, net, trainloader, optimizer, scheduler, criterion, logger, de
     print_freq = len(trainloader) // 10
     start_time = time.time()
 
+    parquet_path = "./cache/train_log.parquet"
+    os.makedirs("./cache", exist_ok=True)
+
     for batch, (inputs, targets) in enumerate(trainloader):
         inputs, targets = inputs.to(device), targets.to(device)
         optimizer.zero_grad()
         outputs = net(inputs)
         loss = criterion(outputs, targets)
         loss.backward()
-        # 加了梯度裁剪
+
         torch.nn.utils.clip_grad_norm_(parameters=net.parameters(), max_norm=10, norm_type=2)
         optimizer.step()
-        # 加在这里了
         scheduler.step()
 
         train_loss += loss.item()
@@ -292,21 +312,32 @@ def retrain(epoch, net, trainloader, optimizer, scheduler, criterion, logger, de
         total += targets.size(0)
         correct += predicted.eq(targets).sum().item()
 
-        # 将loss和acc写入log文件
+        #NUEVO: guardado parcial en .parquet
+        row = {
+            "epoch": epoch,
+            "batch": batch,
+            "lr": lr,
+            "train_loss": float(train_loss / (batch + 1)),
+            "train_acc": float(correct / total),
+            "time": time.time() - start_time
+        }
+        df = pd.DataFrame([row])
+        df.to_parquet(parquet_path, append=True, engine="fastparquet")
+
+        #NUEVO: mensaje de proceso
+        print(f"[RETRAIN] Epoch {epoch} | Batch {batch}/{len(trainloader)} | "
+              f"Loss {row['train_loss']:.4f} | Acc {row['train_acc']:.4f}")
+
         if batch % print_freq == 0 and batch != 0:
-            current_time = time.time()
-            cost_time = current_time - start_time
             logger.info(
-                'Epoch[{}] ({}/{}):\t'
-                'lr {:.4f}\t'
-                'Loss {:.4f}\t'
-                'Accuracy {:2.2%}\t\t'
-                'Time {:.2f}s'.format(
+                'Epoch[{}] ({}/{}):\t lr {:.4f}\t Loss {:.4f}\t Accuracy {:2.2%}\t Time {:.2f}s'.format(
                     epoch, batch, len(trainloader), lr,
-                    float(train_loss / (batch + 1)), float(correct / total), cost_time
+                    float(train_loss / (batch + 1)),
+                    float(correct / total),
+                    row["time"]
                 )
             )
-            start_time = current_time
+            start_time = time.time()
 
 
 # def get_logger(file_path):
