@@ -125,7 +125,7 @@ def test(epoch, net, testloader, criterion, path, best_acc, logger, device='cpu'
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
 
-            #NUEVO: guardado parcial en .parquet
+            # NUEVO: guardado parcial seguro en .parquet
             row = {
                 "epoch": epoch,
                 "batch": batch,
@@ -133,8 +133,14 @@ def test(epoch, net, testloader, criterion, path, best_acc, logger, device='cpu'
                 "test_acc": float(correct / total),
                 "time": time.time() - start_time
             }
+
             df = pd.DataFrame([row])
-            df.to_parquet(parquet_path, append=True, engine="fastparquet")
+
+            if not os.path.exists(parquet_path):
+                df.to_parquet(parquet_path, index=False, engine="fastparquet")
+            else:
+                from fastparquet import write
+                write(parquet_path, df, append=True)
 
             #NUEVO: mensaje de proceso
             print(f"[TEST] Epoch {epoch} | Batch {batch}/{len(testloader)} | "
@@ -142,7 +148,9 @@ def test(epoch, net, testloader, criterion, path, best_acc, logger, device='cpu'
 
     logger.info(
         'Test Loss {:.4f}\tAccuracy {:2.2%}\tTime {:.2f}s'.format(
-            float(test_loss / (batch + 1)), float(correct / total), row["time"]
+            float(test_loss / (batch + 1)),
+            float(correct / total),
+            row["time"]
         )
     )
 
@@ -150,6 +158,7 @@ def test(epoch, net, testloader, criterion, path, best_acc, logger, device='cpu'
     if acc > best_acc:
         print("Saving best model...")
         print(list(net.state_dict().keys())[0][:6])
+
         if list(net.state_dict().keys())[0][:6] == 'module':
             net_state_dict = net.module.state_dict()
         else:
@@ -160,6 +169,7 @@ def test(epoch, net, testloader, criterion, path, best_acc, logger, device='cpu'
             'acc': acc,
             'epoch': epoch,
         }
+
         torch.save(state, path + 'ckpt.pth')
         best_acc = acc
 
@@ -322,7 +332,17 @@ def retrain(epoch, net, trainloader, optimizer, scheduler, criterion, logger, de
             "time": time.time() - start_time
         }
         df = pd.DataFrame([row])
-        df.to_parquet(parquet_path, append=True, engine="fastparquet")
+
+        if not os.path.exists(parquet_path):
+            df.to_parquet(parquet_path, index=False, engine="fastparquet")
+        else:
+            from fastparquet import ParquetFile, write
+
+            pf = ParquetFile(parquet_path)
+            existing_schema = pf.schema
+
+            write(parquet_path, df, append=True)
+
 
         #NUEVO: mensaje de proceso
         print(f"[RETRAIN] Epoch {epoch} | Batch {batch}/{len(trainloader)} | "
