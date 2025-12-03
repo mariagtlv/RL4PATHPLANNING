@@ -1,8 +1,8 @@
 import pandas as pd
 
 def main():
-    parquet_path = "HA-ENAS/cache/evaluated_individuals.parquet"   
-    csv_path = "HA-ENAS/cache/evaluated_individuals.csv"          
+    parquet_path = "HA-ENAS/cache/train_log.parquet"   
+    csv_path = "HA-ENAS/cache/train_log.csv"          
 
     try:
         print(f"Cargando archivo Parquet: {parquet_path}")

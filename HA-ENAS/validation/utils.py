@@ -11,6 +11,8 @@ from torchvision.datasets import ImageFolder
 import torchattacks
 from torch.utils.data import DataLoader
 import pandas as pd 
+from sklearn.metrics import f1_score
+
 
 
 # 使用方法
@@ -125,12 +127,16 @@ def test(epoch, net, testloader, criterion, path, best_acc, logger, device='cpu'
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
 
+            #NUEVO: calculo F1
+            f1 = f1_score(targets.cpu(), predicted.cpu(), average="macro")
+
             # NUEVO: guardado parcial seguro en .parquet
             row = {
                 "epoch": epoch,
                 "batch": batch,
                 "test_loss": float(test_loss / (batch + 1)),
                 "test_acc": float(correct / total),
+                "test_f1": float(f1),  
                 "time": time.time() - start_time
             }
 
@@ -150,6 +156,7 @@ def test(epoch, net, testloader, criterion, path, best_acc, logger, device='cpu'
         'Test Loss {:.4f}\tAccuracy {:2.2%}\tTime {:.2f}s'.format(
             float(test_loss / (batch + 1)),
             float(correct / total),
+            float(f1),
             row["time"]
         )
     )
@@ -322,6 +329,9 @@ def retrain(epoch, net, trainloader, optimizer, scheduler, criterion, logger, de
         total += targets.size(0)
         correct += predicted.eq(targets).sum().item()
 
+        #NUEVO: calculo medida F1
+        f1 = f1_score(targets.cpu(), predicted.cpu(), average="macro")
+
         #NUEVO: guardado parcial en .parquet
         row = {
             "epoch": epoch,
@@ -329,6 +339,7 @@ def retrain(epoch, net, trainloader, optimizer, scheduler, criterion, logger, de
             "lr": lr,
             "train_loss": float(train_loss / (batch + 1)),
             "train_acc": float(correct / total),
+            "train_f1": float(f1),
             "time": time.time() - start_time
         }
         df = pd.DataFrame([row])
@@ -354,6 +365,7 @@ def retrain(epoch, net, trainloader, optimizer, scheduler, criterion, logger, de
                     epoch, batch, len(trainloader), lr,
                     float(train_loss / (batch + 1)),
                     float(correct / total),
+                    float(f1),
                     row["time"]
                 )
             )
