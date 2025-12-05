@@ -1,0 +1,18 @@
+------------------
+acc = 94.80%
+------------------
+
+vit->HA_Net
+FFGSM: 64.79%
+MI-FGSM: 64.90%
+PGD: 66.08%
+
+res50->HA_Net
+FFGSM: 65.15%
+MI-FGSM: 64.68%
+PGD: 66.03%
+
+mlp->HA_Net
+FFGSM: 63.30%
+MI-FGSM: 63.16%
+PGD: 64.19%
