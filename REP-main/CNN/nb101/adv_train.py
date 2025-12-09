@@ -7,6 +7,11 @@ import numpy as np
 import genotypes
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
+from sklearn.metrics import f1_score
+import pandas as pd
+import os
+import time
+from datetime import datetime
 
 from model import Network
 from loss import trades_loss, madry_loss
@@ -38,6 +43,45 @@ args = parser.parse_args()
 
 CIFAR_CLASSES = 10
 
+def save_metrics(record):
+    os.makedirs("rep_results", exist_ok=True)
+    parquet_path = "rep_results/rep_cnn_nb101_training_results.parquet"
+
+    df_new = pd.DataFrame([record])
+
+    if os.path.exists(parquet_path):
+        df_old = pd.read_parquet(parquet_path)
+        df_all = pd.concat([df_old, df_new], ignore_index=True)
+    else:
+        df_all = df_new
+
+    df_all.to_parquet(parquet_path, index=False)
+    print(f"[PARQUET] Guardada fila en {parquet_path}")
+
+def fgsm_attack(model, images, labels, eps):
+    images.requires_grad = True
+    outputs = model(images)
+    loss = nn.CrossEntropyLoss()(outputs, labels)
+    model.zero_grad()
+    loss.backward()
+    perturbed = images + eps * images.grad.sign()
+    return torch.clamp(perturbed, 0, 1)
+
+
+def pgd_attack(model, images, labels, eps=0.031, alpha=0.007, steps=20):
+    ori = images.clone().detach()
+    images = images.clone().detach()
+    for _ in range(steps):
+        images.requires_grad = True
+        outputs = model(images)
+        loss = nn.CrossEntropyLoss()(outputs, labels)
+        model.zero_grad()
+        loss.backward()
+        adv = images + alpha * images.grad.sign()
+        eta = torch.clamp(adv - ori, min=-eps, max=eps)
+        images = torch.clamp(ori + eta, 0, 1).detach()
+    return images
+
 
 def main():
     np.random.seed(args.seed)
@@ -48,18 +92,21 @@ def main():
     torch.cuda.set_device(args.gpu)
 
     train_transform, valid_transform = utils._data_transforms_cifar10(args)
-    train_data = dset.CIFAR10(root='/home/yuqi/data/', train=True, download=True, transform=train_transform)
-    valid_data = dset.CIFAR10(root='/home/yuqi/data/', train=False, download=True, transform=valid_transform)
+    train_data = dset.CIFAR10(root=args.data, train=True, download=True, transform=train_transform)
+    valid_data = dset.CIFAR10(root=args.data, train=False, download=True, transform=valid_transform)
+
     train_queue = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
     valid_queue = torch.utils.data.DataLoader(valid_data, batch_size=args.batch_size, shuffle=False)
 
-    criterion = nn.CrossEntropyLoss()
-    criterion = criterion.cuda()
+    criterion = nn.CrossEntropyLoss().cuda()
 
     genotype = genotypes.REP_DARTS
-    model = Network(args.init_channels, CIFAR_CLASSES, args.layers, criterion, args.output_weights, search_space='3', steps=5, geno=genotype)
-    model = model.cuda()
-    print("param size: ", utils.count_parameters_in_MB(model), 'MB')
+
+    model = Network(
+        args.init_channels, CIFAR_CLASSES, args.layers,
+        criterion, args.output_weights, search_space='3',
+        steps=5, geno=genotype
+    ).cuda()
 
     optimizer = torch.optim.SGD(
         model.parameters(),
@@ -69,97 +116,137 @@ def main():
     )
 
     best_acc = 0.0
+
     for epoch in range(args.epochs):
+        start = time.time()
+
         adjust_learning_rate(optimizer, epoch)
         model.drop_path_prob = args.drop_path_prob * epoch / args.epochs
 
-        train_acc, train_obj = train(train_queue, model, criterion, optimizer)
-        print('epoch: ', epoch, 'train_acc: ', train_acc)
+        train_acc, train_loss = train(train_queue, model, criterion, optimizer)
+        valid_acc, valid_loss, f1, fgsm_acc, pgd_acc = evaluate(valid_queue, model, criterion)
 
-        valid_acc, valid_obj = infer(valid_queue, model, criterion)
+        params = utils.count_parameters_in_MB(model)
+
+        record = {
+            "timestamp": datetime.now().isoformat(),
+            "epoch": epoch,
+            "train_acc": train_acc,
+            "train_loss": train_loss,
+            "valid_acc": valid_acc,
+            "valid_loss": valid_loss,
+            "f1_score": f1,
+            "fgsm_acc": fgsm_acc,
+            "pgd_acc": pgd_acc,
+            "robustness": (fgsm_acc + pgd_acc) / 2,
+            "execution_time_epoch": time.time() - start,
+            "genotype_normal": str(genotype.normal) if hasattr(genotype, "normal") else None,
+            "genotype_reduce": str(genotype.reduce) if hasattr(genotype, "reduce") else None,
+            "genotype_full": str(genotype),
+            "params": params
+        }
+
+        save_metrics(record)
 
         if valid_acc > best_acc:
             best_acc = valid_acc
             torch.save(model.state_dict(), './model.pt')
 
-        print('valid_acc: ', valid_acc, 'best_acc: ', best_acc)
+        print(f"[EPOCH {epoch}] acc={valid_acc:.3f} | best={best_acc:.3f} | f1={f1:.3f} | pgd={pgd_acc:.3f}")
 
 
 def train(train_queue, model, criterion, optimizer):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
-    top5 = utils.AvgrageMeter()
+
     model.train()
 
-    for step, (input, target) in enumerate(train_queue):
-        input = Variable(input).cuda(non_blocking=True)
-        target = Variable(target).cuda(non_blocking=True)
+    for step, (inp, target) in enumerate(train_queue):
+        inp = inp.cuda(non_blocking=True)
+        target = target.cuda(non_blocking=True)
 
         optimizer.zero_grad()
-        logits = model(input)
+
         if args.adv_loss == 'pgd':
             loss = madry_loss(
-                model,
-                input,
-                target,
-                optimizer,
+                model, inp, target, optimizer,
                 step_size=args.step_size,
                 epsilon=args.epsilon,
-                perturb_steps=args.num_steps)
-        elif args.adv_loss == 'trades':
-            loss = trades_loss(model,
-                               input,
-                               target,
-                               optimizer,
-                               step_size=args.step_size,
-                               epsilon=args.epsilon,
-                               perturb_steps=args.num_steps,
-                               beta=args.beta,
-                               distance='l_inf')
+                perturb_steps=args.num_steps
+            )
+        else:
+            loss = trades_loss(
+                model, inp, target, optimizer,
+                step_size=args.step_size,
+                epsilon=args.epsilon,
+                perturb_steps=args.num_steps,
+                beta=args.beta
+            )
+
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
         optimizer.step()
 
-        prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
-        n = input.size(0)
-        objs.update(loss.data.item(), n)
-        top1.update(prec1.data.item(), n)
-        top5.update(prec5.data.item(), n)
+        logits = model(inp)
+        prec1, _ = utils.accuracy(logits, target, topk=(1, 5))
+        objs.update(loss.item(), inp.size(0))
+        top1.update(prec1.item(), inp.size(0))
 
     return top1.avg, objs.avg
 
-
-def infer(valid_queue, model, criterion):
+def evaluate(valid_queue, model, criterion):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
-    top5 = utils.AvgrageMeter()
+
     model.eval()
 
+    all_preds = []
+    all_targets = []
+
+    fgsm_correct = 0
+    pgd_correct = 0
+    total = 0
+
     with torch.no_grad():
-        for step, (input, target) in enumerate(valid_queue):
-            input = Variable(input, requires_grad=False).cuda(non_blocking=True)
-            target = Variable(target, requires_grad=False).cuda(non_blocking=True)
+        for inp, target in valid_queue:
+            inp = inp.cuda()
+            target = target.cuda()
 
-            logits = model(input)
+            logits = model(inp)
             loss = criterion(logits, target)
+            prec1, _ = utils.accuracy(logits, target, topk=(1, 5))
 
-            prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
-            n = input.size(0)
-            objs.update(loss.data.item(), n)
-            top1.update(prec1.data.item(), n)
-            top5.update(prec5.data.item(), n)
+            objs.update(loss.item(), inp.size(0))
+            top1.update(prec1.item(), inp.size(0))
 
-    return top1.avg, objs.avg
+            preds = torch.argmax(logits, 1)
+            all_preds.extend(preds.cpu().numpy())
+            all_targets.extend(target.cpu().numpy())
 
+            adv_fgsm = fgsm_attack(model, inp.clone(), target, eps=args.epsilon)
+            out_fgsm = model(adv_fgsm)
+            fgsm_correct += (torch.argmax(out_fgsm, 1) == target).sum().item()
+
+            adv_pgd = pgd_attack(model, inp.clone(), target, eps=args.epsilon, alpha=args.step_size, steps=20)
+            out_pgd = model(adv_pgd)
+            pgd_correct += (torch.argmax(out_pgd, 1) == target).sum().item()
+
+            total += target.size(0)
+
+    f1 = f1_score(all_targets, all_preds, average="macro")
+    fgsm_acc = fgsm_correct / total
+    pgd_acc = pgd_correct / total
+
+    return top1.avg, objs.avg, f1, fgsm_acc, pgd_acc
 
 def adjust_learning_rate(optimizer, epoch):
     lr = args.learning_rate
     if epoch >= 99:
-        lr = args.learning_rate * 0.1
+        lr *= 0.1
     if epoch >= 149:
-        lr = args.learning_rate * 0.01
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
+        lr *= 0.01
+    for pg in optimizer.param_groups:
+        pg['lr'] = lr
 
 
 if __name__ == '__main__':

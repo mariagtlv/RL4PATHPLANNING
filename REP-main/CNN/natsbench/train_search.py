@@ -6,11 +6,13 @@ import torch.utils
 import utils
 import torchvision.datasets as dset
 import torch.backends.cudnn as cudnn
+import pandas as pd
+import os
+from datetime import datetime
 
 from torch.autograd import Variable
 from model_search import TinyNetworkDarts as Network
 from architect import Architect
-
 
 parser = argparse.ArgumentParser("cifar")
 parser.add_argument('--gpu', type=int, default=0, help='gpu device id')
@@ -31,6 +33,19 @@ parser.add_argument('--arch_learning_rate', type=float, default=3e-4, help='lear
 parser.add_argument('--arch_weight_decay', type=float, default=1e-3, help='weight decay for arch encoding')
 args = parser.parse_args()
 
+def save_metrics_record(record, exp_path):
+    parquet_path = os.path.join(exp_path, "rep_cnn_natsbench_results.parquet")
+
+    df_new = pd.DataFrame([record])
+
+    if os.path.exists(parquet_path):
+        df_old = pd.read_parquet(parquet_path)
+        df_all = pd.concat([df_old, df_new], ignore_index=True)
+    else:
+        df_all = df_new
+
+    df_all.to_parquet(parquet_path, index=False)
+    print(f"[PARQUET] Métrica guardada → {parquet_path}")
 
 def main():
     np.random.seed(args.seed)
@@ -39,14 +54,16 @@ def main():
     torch.manual_seed(args.seed)
     cudnn.enabled = True
     torch.cuda.manual_seed(args.seed)
-    print('gpu device: %d' % args.gpu)
-    print('args: %s' % args)
+    print('gpu device:', args.gpu)
+    print("args:", args)
 
-    criterion = nn.CrossEntropyLoss()
-    criterion = criterion.cuda()
+    exp_path = "rep_results"
+    os.makedirs(exp_path, exist_ok=True)
+
+    criterion = nn.CrossEntropyLoss().cuda()
+
     search_space = ['nor_conv_1x1', 'nor_conv_3x3', 'avg_pool_3x3', 'skip_connect', 'none']
-    model = Network(C=16, N=5, max_nodes=4, num_classes=10, search_space=search_space, criterion=criterion)
-    model = model.cuda()
+    model = Network(C=16, N=5, max_nodes=4, num_classes=10, search_space=search_space, criterion=criterion).cuda()
 
     optimizer = torch.optim.SGD(
         model.parameters(),
@@ -71,24 +88,41 @@ def main():
         sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[split:num_train]),
         pin_memory=True)
 
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, float(args.epochs), eta_min=args.learning_rate_min)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, float(args.epochs), eta_min=args.learning_rate_min
+    )
 
     architect = Architect(model, args)
 
+    seen_genotypes = set()
+
     for epoch in range(args.epochs):
-        print('epoch: ', epoch)
-
+        print('epoch:', epoch)
         print(model.show_alphas())
-        print(model.genotype())
+        genotype = model.genotype()
+        print(genotype)
 
-        train_acc, train_obj = train(train_queue, valid_queue, model, criterion, optimizer, architect)
-        print('train_acc: ', train_acc)
+        train_acc, train_loss = train(train_queue, valid_queue, model, criterion, optimizer, architect)
+        valid_acc, valid_loss = infer(valid_queue, model, criterion)
 
-        valid_acc, valid_obj = infer(valid_queue, model, criterion)
-        print('valid_acc: ', valid_acc)
+        params = sum(p.numel() for p in model.parameters())
+
+        record = {
+            "timestamp": datetime.now().isoformat(),
+            "epoch": epoch,
+            "train_acc": train_acc,
+            "train_loss": train_loss,
+            "valid_acc": valid_acc,
+            "valid_loss": valid_loss,
+            "genotype_normal": str(genotype.normal),
+            "genotype_reduce": str(genotype.reduce),
+            "genotype_full": str(genotype),
+            "params": params,
+        }
+
+        save_metrics_record(record, exp_path)
 
         scheduler.step()
-
 
 def train(train_queue, valid_queue, model, criterion, optimizer, architect):
     objs = utils.AvgrageMeter()
@@ -97,14 +131,13 @@ def train(train_queue, valid_queue, model, criterion, optimizer, architect):
 
     for step, (input, target) in enumerate(train_queue):
         model.train()
-        n = input.size(0)
 
-        input = Variable(input, requires_grad=False).cuda(non_blocking=True)
-        target = Variable(target, requires_grad=False).cuda(non_blocking=True)
+        input = input.cuda(non_blocking=True)
+        target = target.cuda(non_blocking=True)
 
         input_search, target_search = next(iter(valid_queue))
-        input_search = Variable(input_search, requires_grad=False).cuda(non_blocking=True)
-        target_search = Variable(target_search, requires_grad=False).cuda(non_blocking=True)
+        input_search = input_search.cuda(non_blocking=True)
+        target_search = target_search.cuda(non_blocking=True)
 
         architect.step(input_search, target_search)
 
@@ -116,12 +149,11 @@ def train(train_queue, valid_queue, model, criterion, optimizer, architect):
         optimizer.step()
 
         prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
-        objs.update(loss.data.item(), n)
-        top1.update(prec1.data.item(), n)
-        top5.update(prec5.data.item(), n)
+        objs.update(loss.item(), input.size(0))
+        top1.update(prec1.item(), input.size(0))
+        top5.update(prec5.item(), input.size(0))
 
     return top1.avg, objs.avg
-
 
 def infer(valid_queue, model, criterion):
     objs = utils.AvgrageMeter()
@@ -131,17 +163,16 @@ def infer(valid_queue, model, criterion):
 
     with torch.no_grad():
         for step, (input, target) in enumerate(valid_queue):
-            input = Variable(input, requires_grad=False).cuda(non_blocking=True)
-            target = Variable(target, requires_grad=False).cuda(non_blocking=True)
+            input = input.cuda(non_blocking=True)
+            target = target.cuda(non_blocking=True)
 
             logits = model(input)
             loss = criterion(logits, target)
 
             prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
-            n = input.size(0)
-            objs.update(loss.data.item(), n)
-            top1.update(prec1.data.item(), n)
-            top5.update(prec5.data.item(), n)
+            objs.update(loss.item(), input.size(0))
+            top1.update(prec1.item(), input.size(0))
+            top5.update(prec5.item(), input.size(0))
 
     return top1.avg, objs.avg
 

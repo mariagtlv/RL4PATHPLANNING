@@ -6,6 +6,11 @@ import torch.nn as nn
 import torch.utils
 import torchvision.datasets as dset
 import torch.backends.cudnn as cudnn
+import pandas as pd
+import os
+import time
+from datetime import datetime
+from sklearn.metrics import f1_score
 
 from torch.autograd import Variable
 from model_search import Network
@@ -37,6 +42,19 @@ args = parser.parse_args()
 
 CIFAR_CLASSES = 10
 
+def save_metrics_record(record, exp_path):
+    parquet_path = os.path.join(exp_path, "rep_cnn_nb101_results.parquet")
+
+    df_new = pd.DataFrame([record])
+
+    if os.path.exists(parquet_path):
+        df_old = pd.read_parquet(parquet_path)
+        df_all = pd.concat([df_old, df_new], ignore_index=True)
+    else:
+        df_all = df_new
+
+    df_all.to_parquet(parquet_path, index=False)
+    print(f"[PARQUET] Métrica guardada → {parquet_path}")
 
 def main():
     np.random.seed(args.seed)
@@ -48,11 +66,12 @@ def main():
     print('gpu device: ', args.gpu)
     print("args: ", args)
 
-    criterion = nn.CrossEntropyLoss()
-    criterion = criterion.cuda()
-    model = Network(args.init_channels, CIFAR_CLASSES, args.layers, criterion, args.output_weights, search_space='3', steps=5)
-    model = model.cuda()
-    #print("param size = ", utils.count_parameters_in_MB(model), 'MB')
+    exp_path = "rep_results"
+    os.makedirs(exp_path, exist_ok=True)
+
+    criterion = nn.CrossEntropyLoss().cuda()
+    model = Network(args.init_channels, CIFAR_CLASSES, args.layers,
+                    criterion, args.output_weights, search_space='3', steps=5).cuda()
 
     optimizer = torch.optim.SGD(
         model.parameters(),
@@ -66,43 +85,60 @@ def main():
     train_queue = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, pin_memory=True)
     valid_queue = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, pin_memory=True)
 
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, float(args.epochs), eta_min=args.learning_rate_min)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, float(args.epochs), eta_min=args.learning_rate_min
+    )
 
     architect = Architect(model, args)
 
     for epoch in range(args.epochs):
-        lr = scheduler.get_last_lr()
-        print('epoch: ', epoch, ' lr: ', lr[0])
+        epoch_start = time.time()
 
-        print('arch parameters: ', model.arch_parameters())
-        print('genotype: ', model.genotype())
+        lr = scheduler.get_last_lr()[0]
+        print(f"epoch {epoch}, lr {lr}")
+        print("genotype:", model.genotype())
 
-        # training
-        train_acc, train_obj = train(train_queue, valid_queue, model, architect, criterion, optimizer)
-        print('train_acc: ', train_acc)
+        train_acc, train_loss = train(train_queue, valid_queue, model, architect, criterion, optimizer)
+        print("train_acc:", train_acc)
+
+        valid_acc, valid_loss, f1 = infer(valid_queue, model, criterion)
+        print("valid_acc:", valid_acc, "F1:", f1)
+
         scheduler.step()
 
-        # validation
-        valid_acc, valid_obj = infer(valid_queue, model, criterion)
-        print('valid_acc: ', valid_acc)
+        params = sum(p.numel() for p in model.parameters())
+        exec_time = time.time() - epoch_start
+
+        record = {
+            "timestamp": datetime.now().isoformat(),
+            "epoch": epoch,
+            "learning_rate": lr,
+            "train_acc": train_acc,
+            "train_loss": train_loss,
+            "valid_acc": valid_acc,
+            "valid_loss": valid_loss,
+            "f1_score": f1,
+            "execution_time_epoch": exec_time,
+            "genotype": str(model.genotype()),
+            "params": params
+        }
+
+        save_metrics_record(record, exp_path)
 
 
 def train(train_queue, valid_queue, model, architect, criterion, optimizer):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
-    top5 = utils.AvgrageMeter()
 
     for step, (input, target) in enumerate(train_queue):
         model.train()
-        n = input.size(0)
 
-        input = Variable(input, requires_grad=False).cuda(non_blocking=True)
-        target = Variable(target, requires_grad=False).cuda(non_blocking=True)
+        input = input.cuda(non_blocking=True)
+        target = target.cuda(non_blocking=True)
 
-        # get a random minibatch from the search queue with replacement
         input_search, target_search = next(iter(valid_queue))
-        input_search = Variable(input_search, requires_grad=False).cuda(non_blocking=True)
-        target_search = Variable(target_search, requires_grad=False).cuda(non_blocking=True)
+        input_search = input_search.cuda(non_blocking=True)
+        target_search = target_search.cuda(non_blocking=True)
 
         architect.step(input_search, target_search)
 
@@ -113,35 +149,39 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer):
         nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
         optimizer.step()
 
-        prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
-        objs.update(loss.data.item(), n)
-        top1.update(prec1.data.item(), n)
-        top5.update(prec5.data.item(), n)
+        prec1, _ = utils.accuracy(logits, target, topk=(1, 5))
+        objs.update(loss.item(), input.size(0))
+        top1.update(prec1.item(), input.size(0))
 
     return top1.avg, objs.avg
-
 
 def infer(valid_queue, model, criterion):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
-    top5 = utils.AvgrageMeter()
-    model.eval()
 
+    all_preds = []
+    all_targets = []
+
+    model.eval()
     with torch.no_grad():
         for step, (input, target) in enumerate(valid_queue):
-            input = Variable(input, requires_grad=False).cuda(non_blocking=True)
-            target = Variable(target, requires_grad=False).cuda(non_blocking=True)
+            input = input.cuda(non_blocking=True)
+            target = target.cuda(non_blocking=True)
 
             logits = model(input)
             loss = criterion(logits, target)
 
-            prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
-            n = input.size(0)
-            objs.update(loss.data.item(), n)
-            top1.update(prec1.data.item(), n)
-            top5.update(prec5.data.item(), n)
+            prec1, _ = utils.accuracy(logits, target, topk=(1, 5))
+            objs.update(loss.item(), input.size(0))
+            top1.update(prec1.item(), input.size(0))
 
-    return top1.avg, objs.avg
+            preds = torch.argmax(logits, dim=1)
+            all_preds.extend(preds.cpu().numpy())
+            all_targets.extend(target.cpu().numpy())
+
+    f1 = f1_score(all_targets, all_preds, average='macro')
+
+    return top1.avg, objs.avg, f1
 
 
 if __name__ == '__main__':
