@@ -7,6 +7,9 @@ import torch.utils
 import torchvision.datasets as dset
 import torch.backends.cudnn as cudnn
 import genotypes
+import pandas as pd
+import time
+from sklearn.metrics import f1_score
 
 from torch.autograd import Variable
 from model import NetworkCIFAR as Network
@@ -43,23 +46,22 @@ CIFAR_CLASSES = 10
 
 
 def main():
+    start_time = time.time()  
+
     np.random.seed(args.seed)
     torch.cuda.set_device(args.gpu)
     cudnn.benchmark = True
     torch.manual_seed(args.seed)
     cudnn.enabled = True
     torch.cuda.manual_seed(args.seed)
-    print('gpu device: ', args.gpu)
-    print("args: ", args)
 
     genotype = eval("genotypes.%s" % args.arch)
     model = Network(args.init_channels, CIFAR_CLASSES, args.layers, args.auxiliary, genotype)
     model = model.cuda()
 
-    print("param size: ", utils.count_parameters_in_MB(model), 'MB')
+    params = utils.count_parameters_in_MB(model)
 
-    criterion = nn.CrossEntropyLoss()
-    criterion = criterion.cuda()
+    criterion = nn.CrossEntropyLoss().cuda()
     optimizer = torch.optim.SGD(
         model.parameters(),
         args.learning_rate,
@@ -74,66 +76,79 @@ def main():
     train_queue = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, shuffle=True, pin_memory=True)
     valid_queue = torch.utils.data.DataLoader(valid_data, batch_size=args.batch_size, shuffle=False, pin_memory=True)
 
+    metrics = []
+
     best_acc = 0.0
     for epoch in range(args.epochs):
         adjust_learning_rate(optimizer, epoch)
         model.drop_path_prob = args.drop_path_prob * epoch / args.epochs
 
-        train_acc, train_obj = train(train_queue, model, criterion, optimizer)
-        print('epoch: ', epoch, 'train_acc: ', train_acc)
+        train_acc, train_loss = train(train_queue, model, criterion, optimizer)
+        valid_acc, valid_loss, y_true, y_pred = infer(valid_queue, model, criterion)
 
-        valid_acc, valid_obj = infer(valid_queue, model, criterion)
+        f1 = f1_score(y_true, y_pred, average="macro") 
 
         if valid_acc > best_acc:
             best_acc = valid_acc
             torch.save(model.state_dict(), './model.pt')
 
-        print('valid_acc: ', valid_acc, 'best_acc: ', best_acc)
+        metrics.append({
+            "timestamp": pd.Timestamp.now(),
+            "epoch": epoch,
+            "genotype_normal": str(genotype.normal),
+            "genotype_reduce": str(genotype.reduce),
+            "genotype_full": str(genotype),
+            "clean_acc": valid_acc,
+            "train_acc": train_acc,
+            "f1": f1,
+            "params": params
+        })
+
+    fgsm_acc = utils.eval_fgsm(model, valid_queue)
+    pgd_acc = utils.eval_pgd(model, valid_queue)
+    robustness = pgd_acc
+
+    for row in metrics:
+        row["fgsm_acc"] = fgsm_acc
+        row["pgd_acc"] = pgd_acc
+        row["robustness"] = robustness
+        row["total_time_sec"] = time.time() - start_time
+
+    df = pd.DataFrame(metrics)
+    df.to_parquet("rep_cnn_darts_training_metrics.parquet", index=False)
+    print("Métricas guardadas en rep_cnn_darts_training_metrics.parquet")
 
 
 def train(train_queue, model, criterion, optimizer):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
-    top5 = utils.AvgrageMeter()
     model.train()
 
     for step, (input, target) in enumerate(train_queue):
-        input = Variable(input).cuda(non_blocking=True)
-        target = Variable(target).cuda(non_blocking=True)
+        input = input.cuda()
+        target = target.cuda()
 
         optimizer.zero_grad()
         logits, logits_aux = model(input)
-        if args.adv_loss == 'pgd':
-            loss = madry_loss(
-                model,
-                input,
-                target,
-                optimizer,
-                step_size=args.step_size,
-                epsilon=args.epsilon,
-                perturb_steps=args.num_steps)
-        elif args.adv_loss == 'trades':
-            loss = trades_loss(model,
-                               input,
-                               target,
-                               optimizer,
-                               step_size=args.step_size,
-                               epsilon=args.epsilon,
-                               perturb_steps=args.num_steps,
-                               beta=args.beta,
-                               distance='l_inf')
+
+        loss = madry_loss(
+            model, input, target, optimizer,
+            step_size=args.step_size,
+            epsilon=args.epsilon,
+            perturb_steps=args.num_steps
+        )
+
         if args.auxiliary:
             loss_aux = criterion(logits_aux, target)
             loss += args.auxiliary_weight * loss_aux
+
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
         optimizer.step()
 
-        prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
-        n = input.size(0)
-        objs.update(loss.data.item(), n)
-        top1.update(prec1.data.item(), n)
-        top5.update(prec5.data.item(), n)
+        prec1, _ = utils.accuracy(logits, target, topk=(1, 5))
+        objs.update(loss.item(), input.size(0))
+        top1.update(prec1.item(), input.size(0))
 
     return top1.avg, objs.avg
 
@@ -141,36 +156,38 @@ def train(train_queue, model, criterion, optimizer):
 def infer(valid_queue, model, criterion):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
-    top5 = utils.AvgrageMeter()
     model.eval()
+
+    all_labels = []
+    all_preds = []
 
     with torch.no_grad():
         for step, (input, target) in enumerate(valid_queue):
-            input = Variable(input, requires_grad=False).cuda(non_blocking=True)
-            target = Variable(target, requires_grad=False).cuda(non_blocking=True)
+            input = input.cuda()
+            target = target.cuda()
 
             logits, _ = model(input)
             loss = criterion(logits, target)
 
-            prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
-            n = input.size(0)
-            objs.update(loss.data.item(), n)
-            top1.update(prec1.data.item(), n)
-            top5.update(prec5.data.item(), n)
+            prec1, _ = utils.accuracy(logits, target, topk=(1, 5))
+            objs.update(loss.item(), input.size(0))
+            top1.update(prec1.item(), input.size(0))
 
-    return top1.avg, objs.avg
+            all_labels.extend(target.cpu().numpy())
+            all_preds.extend(logits.argmax(dim=1).cpu().numpy())
+
+    return top1.avg, objs.avg, all_labels, all_preds
 
 
 def adjust_learning_rate(optimizer, epoch):
     lr = args.learning_rate
     if epoch >= 99:
-        lr = args.learning_rate * 0.1
+        lr *= 0.1
     if epoch >= 149:
-        lr = args.learning_rate * 0.01
+        lr *= 0.01
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
 
 if __name__ == '__main__':
     main()
-

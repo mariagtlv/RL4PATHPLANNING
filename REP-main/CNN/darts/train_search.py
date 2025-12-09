@@ -17,6 +17,8 @@ import pandas as pd
 import os
 from datetime import datetime
 
+from sklearn.metrics import f1_score
+
 parser = argparse.ArgumentParser("cifar")
 parser.add_argument('--data', type=str, default='dataset', help='location of the data corpus')
 parser.add_argument('--batch_size', type=int, default=64, help='batch size')
@@ -208,6 +210,9 @@ def infer(valid_queue, model, criterion, type):
 
     model.if_sharing = True
 
+    all_true = []
+    all_pred = []
+
     for step, (input, target) in enumerate(valid_queue):
         input = Variable(input.cuda(), requires_grad=True)
         target = target.cuda()
@@ -218,20 +223,26 @@ def infer(valid_queue, model, criterion, type):
             attack = torchattacks.PGD(model, eps=2/255, steps=4)
 
         adv_images = attack(input, target)
-        X, y = Variable(adv_images, requires_grad=True), Variable(target)
+        X, y = Variable(adv_images, requires_grad=False), target
 
         logits = model(X)
         loss = criterion(logits, y)
 
+        pred = logits.argmax(dim=1)
+
+        all_true.extend(y.cpu().numpy())
+        all_pred.extend(pred.cpu().numpy())
+
         prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
         n = input.size(0)
-        objs.update(loss.data.item(), n)
-        top1.update(prec1.data.item(), n)
-        top5.update(prec5.data.item(), n)
+        objs.update(loss.item(), n)
+        top1.update(prec1.item(), n)
+        top5.update(prec5.item(), n)
 
     model.if_sharing = False
 
-    return top1.avg, objs.avg
+    return top1.avg, objs.avg, all_true, all_pred
+
 
 
 if __name__ == '__main__':
