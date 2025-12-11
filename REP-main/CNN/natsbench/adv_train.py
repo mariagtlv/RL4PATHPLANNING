@@ -36,6 +36,7 @@ parser.add_argument('--seed', type=int, default=0, help='random seed')
 parser.add_argument('--grad_clip', type=float, default=5, help='gradient clipping')
 args = parser.parse_args()
 
+
 def save_metrics_record(record, exp_path):
     parquet_path = os.path.join(exp_path, "rep_cnn_natsbench_training_Results.parquet")
 
@@ -52,6 +53,8 @@ def save_metrics_record(record, exp_path):
 
 
 def main():
+    start_time = time.time()
+
     np.random.seed(args.seed)
     torch.cuda.set_device(args.gpu)
     cudnn.benchmark = True
@@ -65,6 +68,7 @@ def main():
     exp_path = "rep_results"
     os.makedirs(exp_path, exist_ok=True)
 
+    # === GENOTYPE (equivalente al script anterior) ===
     op = ['nor_conv_1x1', 'nor_conv_3x3', 'avg_pool_3x3', 'skip_connect', 'none']
     code = [1, 1, 1, 3, 3, 0]  # REP
 
@@ -79,7 +83,6 @@ def main():
     params = sum(p.numel() for p in model.parameters())
 
     criterion = nn.CrossEntropyLoss().cuda()
-
     optimizer = torch.optim.SGD(
         model.parameters(),
         args.learning_rate,
@@ -103,7 +106,6 @@ def main():
         model.drop_path_prob = args.drop_path_prob * epoch / args.epochs
         
         train_acc, train_loss = train(train_queue, model, criterion, optimizer)
-
         valid_acc, valid_loss, f1 = infer(valid_queue, model, criterion)
 
         elapsed = time.time() - start_epoch
@@ -112,26 +114,37 @@ def main():
             best_acc = valid_acc
             torch.save(model.state_dict(), os.path.join(exp_path, 'best_model.pt'))
 
+        # === Registro compatible con el otro script ===
         record = {
             "timestamp": datetime.now().isoformat(),
             "epoch": epoch,
+
+            # ==== GENOTYPES (equivalente si es posible) ====
+            "genotype_normal": str(genotype),
+            "genotype_reduce": None,   # NATSBench no tiene reduce cells
+            "genotype_full": str(genotype),
+
+            # ==== MÉTRICAS ====
             "train_acc": train_acc,
             "train_loss": train_loss,
-            "valid_acc": valid_acc,
-            "valid_loss": valid_loss,
-            "f1_score": f1,
+            "clean_acc": valid_acc,
+            "clean_loss": valid_loss,
+            "f1": f1,
+
+            # ==== INFO ADICIONAL ====
             "params": params,
-            "elapsed_seconds": elapsed,
+            "total_time_sec": time.time() - start_time,
+            "elapsed_seconds_epoch": elapsed
         }
 
         save_metrics_record(record, exp_path)
 
         print(f"[EPOCH {epoch}] train_acc={train_acc:.3f}  valid_acc={valid_acc:.3f}  f1={f1:.3f}  time={elapsed:.1f}s")
 
+
 def train(train_queue, model, criterion, optimizer):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
-
     model.train()
 
     for step, (input, target) in enumerate(train_queue):
@@ -160,10 +173,12 @@ def train(train_queue, model, criterion, optimizer):
 
         logits = model(input)
         prec1, _ = utils.accuracy(logits, target, topk=(1, 5))
+
         objs.update(loss.item(), input.size(0))
         top1.update(prec1.item(), input.size(0))
 
     return top1.avg, objs.avg
+
 
 def infer(valid_queue, model, criterion):
     objs = utils.AvgrageMeter()
@@ -193,6 +208,7 @@ def infer(valid_queue, model, criterion):
     f1 = f1_score(y_true, y_pred, average='macro')
 
     return top1.avg, objs.avg, f1
+
 
 def adjust_learning_rate(optimizer, epoch):
     lr = args.learning_rate

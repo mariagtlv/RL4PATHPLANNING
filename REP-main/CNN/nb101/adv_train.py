@@ -6,7 +6,6 @@ import torchvision.datasets as dset
 import numpy as np
 import genotypes
 import torch.backends.cudnn as cudnn
-from torch.autograd import Variable
 from sklearn.metrics import f1_score
 import pandas as pd
 import os
@@ -45,18 +44,19 @@ CIFAR_CLASSES = 10
 
 def save_metrics(record):
     os.makedirs("rep_results", exist_ok=True)
-    parquet_path = "rep_results/rep_cnn_nb101_training_results.parquet"
+    path = "rep_results/rep_cnn_nb101_training_results.parquet"
 
     df_new = pd.DataFrame([record])
 
-    if os.path.exists(parquet_path):
-        df_old = pd.read_parquet(parquet_path)
+    if os.path.exists(path):
+        df_old = pd.read_parquet(path)
         df_all = pd.concat([df_old, df_new], ignore_index=True)
     else:
         df_all = df_new
 
-    df_all.to_parquet(parquet_path, index=False)
-    print(f"[PARQUET] Guardada fila en {parquet_path}")
+    df_all.to_parquet(path, index=False)
+    print(f"[PARQUET] Guardada fila en {path}")
+
 
 def fgsm_attack(model, images, labels, eps):
     images.requires_grad = True
@@ -118,12 +118,13 @@ def main():
     best_acc = 0.0
 
     for epoch in range(args.epochs):
-        start = time.time()
+        epoch_start = time.time()
 
         adjust_learning_rate(optimizer, epoch)
         model.drop_path_prob = args.drop_path_prob * epoch / args.epochs
 
         train_acc, train_loss = train(train_queue, model, criterion, optimizer)
+
         valid_acc, valid_loss, f1, fgsm_acc, pgd_acc = evaluate(valid_queue, model, criterion)
 
         params = utils.count_parameters_in_MB(model)
@@ -131,19 +132,24 @@ def main():
         record = {
             "timestamp": datetime.now().isoformat(),
             "epoch": epoch,
+
+            "clean_acc": valid_acc,
+            "clean_loss": valid_loss,
+
             "train_acc": train_acc,
             "train_loss": train_loss,
-            "valid_acc": valid_acc,
-            "valid_loss": valid_loss,
-            "f1_score": f1,
+
             "fgsm_acc": fgsm_acc,
             "pgd_acc": pgd_acc,
             "robustness": (fgsm_acc + pgd_acc) / 2,
-            "execution_time_epoch": time.time() - start,
+
+            "f1_score": f1,
+            "execution_time_epoch": time.time() - epoch_start,
+            "params": params,
+
             "genotype_normal": str(genotype.normal) if hasattr(genotype, "normal") else None,
             "genotype_reduce": str(genotype.reduce) if hasattr(genotype, "reduce") else None,
             "genotype_full": str(genotype),
-            "params": params
         }
 
         save_metrics(record)
@@ -161,7 +167,7 @@ def train(train_queue, model, criterion, optimizer):
 
     model.train()
 
-    for step, (inp, target) in enumerate(train_queue):
+    for inp, target in train_queue:
         inp = inp.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)
 
@@ -193,6 +199,7 @@ def train(train_queue, model, criterion, optimizer):
         top1.update(prec1.item(), inp.size(0))
 
     return top1.avg, objs.avg
+
 
 def evaluate(valid_queue, model, criterion):
     objs = utils.AvgrageMeter()
@@ -234,10 +241,12 @@ def evaluate(valid_queue, model, criterion):
             total += target.size(0)
 
     f1 = f1_score(all_targets, all_preds, average="macro")
+
     fgsm_acc = fgsm_correct / total
     pgd_acc = pgd_correct / total
 
     return top1.avg, objs.avg, f1, fgsm_acc, pgd_acc
+
 
 def adjust_learning_rate(optimizer, epoch):
     lr = args.learning_rate
