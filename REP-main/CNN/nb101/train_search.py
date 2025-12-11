@@ -11,6 +11,7 @@ import os
 import time
 from datetime import datetime
 from sklearn.metrics import f1_score
+import torchattacks
 
 from torch.autograd import Variable
 from model_search import Network
@@ -40,13 +41,10 @@ parser.add_argument('--output_weights', type=bool, default=True, help='Whether t
 args = parser.parse_args()
 
 
-CIFAR_CLASSES = 10
-
 def save_metrics_record(record, exp_path):
     parquet_path = os.path.join(exp_path, "rep_cnn_nb101_results.parquet")
 
     df_new = pd.DataFrame([record])
-
     if os.path.exists(parquet_path):
         df_old = pd.read_parquet(parquet_path)
         df_all = pd.concat([df_old, df_new], ignore_index=True)
@@ -56,6 +54,11 @@ def save_metrics_record(record, exp_path):
     df_all.to_parquet(parquet_path, index=False)
     print(f"[PARQUET] Métrica guardada → {parquet_path}")
 
+
+def safe_get(obj, attr):
+    return str(getattr(obj, attr)) if hasattr(obj, attr) else "N/A"
+
+
 def main():
     np.random.seed(args.seed)
     torch.cuda.set_device(args.gpu)
@@ -63,15 +66,18 @@ def main():
     torch.manual_seed(args.seed)
     cudnn.enabled = True
     torch.cuda.manual_seed(args.seed)
-    print('gpu device: ', args.gpu)
-    print("args: ", args)
+
+    print('gpu device:', args.gpu)
+    print("args:", args)
 
     exp_path = "rep_results"
     os.makedirs(exp_path, exist_ok=True)
 
     criterion = nn.CrossEntropyLoss().cuda()
-    model = Network(args.init_channels, CIFAR_CLASSES, args.layers,
-                    criterion, args.output_weights, search_space='3', steps=5).cuda()
+
+    model = Network(args.init_channels, 10, args.layers,
+                    criterion, args.output_weights,
+                    search_space='3', steps=5).cuda()
 
     optimizer = torch.optim.SGD(
         model.parameters(),
@@ -95,14 +101,16 @@ def main():
         epoch_start = time.time()
 
         lr = scheduler.get_last_lr()[0]
-        print(f"epoch {epoch}, lr {lr}")
-        print("genotype:", model.genotype())
+        genotype = model.genotype()
 
         train_acc, train_loss = train(train_queue, valid_queue, model, architect, criterion, optimizer)
-        print("train_acc:", train_acc)
 
         valid_acc, valid_loss, f1 = infer(valid_queue, model, criterion)
-        print("valid_acc:", valid_acc, "F1:", f1)
+
+        fgsm_acc, fgsm_loss = infer_adv(valid_queue, model, criterion, attack_type="FGSM")
+        pgd_acc, pgd_loss = infer_adv(valid_queue, model, criterion, attack_type="PGD")
+
+        robustness = 0.5 * (fgsm_acc + pgd_acc)
 
         scheduler.step()
 
@@ -113,14 +121,24 @@ def main():
             "timestamp": datetime.now().isoformat(),
             "epoch": epoch,
             "learning_rate": lr,
+
             "train_acc": train_acc,
             "train_loss": train_loss,
+
             "valid_acc": valid_acc,
             "valid_loss": valid_loss,
             "f1_score": f1,
+
+            "fgsm_acc": fgsm_acc,
+            "pgd_acc": pgd_acc,
+            "robustness": robustness,
+
             "execution_time_epoch": exec_time,
-            "genotype": str(model.genotype()),
-            "params": params
+            "params": params,
+
+            "genotype_normal": safe_get(genotype, "normal"),
+            "genotype_reduce": safe_get(genotype, "reduce"),
+            "genotype_full": str(genotype)
         }
 
         save_metrics_record(record, exp_path)
@@ -155,6 +173,7 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer):
 
     return top1.avg, objs.avg
 
+
 def infer(valid_queue, model, criterion):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
@@ -182,6 +201,36 @@ def infer(valid_queue, model, criterion):
     f1 = f1_score(all_targets, all_preds, average='macro')
 
     return top1.avg, objs.avg, f1
+
+
+def infer_adv(valid_queue, model, criterion, attack_type="FGSM"):
+    objs = utils.AvgrageMeter()
+    top1 = utils.AvgrageMeter()
+
+    if attack_type == "FGSM":
+        attack_fn = lambda model: torchattacks.FGSM(model, eps=2 / 255)
+    else:
+        attack_fn = lambda model: torchattacks.PGD(model, eps=2 / 255, steps=4)
+
+    model.eval()
+
+    for step, (input, target) in enumerate(valid_queue):
+        input = Variable(input.cuda(), requires_grad=True)
+        target = target.cuda()
+
+        attack = attack_fn(model)
+        adv_images = attack(input, target)
+
+        logits = model(adv_images)
+        loss = criterion(logits, target)
+
+        prec1, _ = utils.accuracy(logits, target, topk=(1, 5))
+        n = input.size(0)
+
+        objs.update(loss.item(), n)
+        top1.update(prec1.item(), n)
+
+    return top1.avg, objs.avg
 
 
 if __name__ == '__main__':

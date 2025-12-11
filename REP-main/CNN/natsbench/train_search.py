@@ -9,6 +9,7 @@ import torch.backends.cudnn as cudnn
 import pandas as pd
 import os
 from datetime import datetime
+import torchattacks
 
 from torch.autograd import Variable
 from model_search import TinyNetworkDarts as Network
@@ -63,13 +64,22 @@ def main():
     criterion = nn.CrossEntropyLoss().cuda()
 
     search_space = ['nor_conv_1x1', 'nor_conv_3x3', 'avg_pool_3x3', 'skip_connect', 'none']
-    model = Network(C=16, N=5, max_nodes=4, num_classes=10, search_space=search_space, criterion=criterion).cuda()
+
+    model = Network(
+        C=16,
+        N=5,
+        max_nodes=4,
+        num_classes=10,
+        search_space=search_space,
+        criterion=criterion
+    ).cuda()
 
     optimizer = torch.optim.SGD(
         model.parameters(),
         args.learning_rate,
         momentum=args.momentum,
-        weight_decay=args.weight_decay)
+        weight_decay=args.weight_decay
+    )
 
     train_transform, valid_transform = utils._data_transforms_cifar10(args)
     train_data = dset.CIFAR10(root=args.data, train=True, download=True, transform=train_transform)
@@ -81,12 +91,14 @@ def main():
     train_queue = torch.utils.data.DataLoader(
         train_data, batch_size=args.batch_size,
         sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:split]),
-        pin_memory=True)
+        pin_memory=True
+    )
 
     valid_queue = torch.utils.data.DataLoader(
         train_data, batch_size=args.batch_size,
         sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[split:num_train]),
-        pin_memory=True)
+        pin_memory=True
+    )
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, float(args.epochs), eta_min=args.learning_rate_min
@@ -94,29 +106,38 @@ def main():
 
     architect = Architect(model, args)
 
-    seen_genotypes = set()
-
     for epoch in range(args.epochs):
-        print('epoch:', epoch)
+        print(f"Epoch {epoch}")
         print(model.show_alphas())
         genotype = model.genotype()
-        print(genotype)
+        print("Genotype:", genotype)
 
         train_acc, train_loss = train(train_queue, valid_queue, model, criterion, optimizer, architect)
-        valid_acc, valid_loss = infer(valid_queue, model, criterion)
+
+        valid_acc_clean, valid_loss_clean = infer(valid_queue, model, criterion)
+
+        fgsm_acc, fgsm_loss, _, _ = infer(valid_queue, model, criterion, attack_type="FGSM")
+
+        pgd_acc, pgd_loss, _, _ = infer(valid_queue, model, criterion, attack_type="PGD")
+
+        robustness = 0.5 * (fgsm_acc + pgd_acc)
 
         params = sum(p.numel() for p in model.parameters())
 
         record = {
             "timestamp": datetime.now().isoformat(),
             "epoch": epoch,
-            "train_acc": train_acc,
-            "train_loss": train_loss,
-            "valid_acc": valid_acc,
-            "valid_loss": valid_loss,
             "genotype_normal": str(genotype.normal),
             "genotype_reduce": str(genotype.reduce),
             "genotype_full": str(genotype),
+
+            "clean_acc": valid_acc_clean,
+            "train_acc": train_acc,
+
+            "fgsm_acc": fgsm_acc,
+            "pgd_acc": pgd_acc,
+            "robustness": robustness,
+
             "params": params,
         }
 
@@ -127,7 +148,6 @@ def main():
 def train(train_queue, valid_queue, model, criterion, optimizer, architect):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
-    top5 = utils.AvgrageMeter()
 
     for step, (input, target) in enumerate(train_queue):
         model.train()
@@ -136,10 +156,10 @@ def train(train_queue, valid_queue, model, criterion, optimizer, architect):
         target = target.cuda(non_blocking=True)
 
         input_search, target_search = next(iter(valid_queue))
-        input_search = input_search.cuda(non_blocking=True)
-        target_search = target_search.cuda(non_blocking=True)
-
-        architect.step(input_search, target_search)
+        architect.step(
+            input_search.cuda(non_blocking=True),
+            target_search.cuda(non_blocking=True)
+        )
 
         optimizer.zero_grad()
         logits = model(input)
@@ -148,34 +168,51 @@ def train(train_queue, valid_queue, model, criterion, optimizer, architect):
         nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
         optimizer.step()
 
-        prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
+        prec1, _ = utils.accuracy(logits, target, topk=(1, 5))
         objs.update(loss.item(), input.size(0))
         top1.update(prec1.item(), input.size(0))
-        top5.update(prec5.item(), input.size(0))
 
     return top1.avg, objs.avg
 
-def infer(valid_queue, model, criterion):
+
+def infer(valid_queue, model, criterion, attack_type=None):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
-    top5 = utils.AvgrageMeter()
+
+    all_true = []
+    all_pred = []
+
     model.eval()
 
-    with torch.no_grad():
-        for step, (input, target) in enumerate(valid_queue):
-            input = input.cuda(non_blocking=True)
-            target = target.cuda(non_blocking=True)
+    for step, (input, target) in enumerate(valid_queue):
 
-            logits = model(input)
-            loss = criterion(logits, target)
+        input = Variable(input.cuda(), requires_grad=True)
+        target = target.cuda()
 
-            prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
-            objs.update(loss.item(), input.size(0))
-            top1.update(prec1.item(), input.size(0))
-            top5.update(prec5.item(), input.size(0))
+        if attack_type == "FGSM":
+            attack = torchattacks.FGSM(model, eps=2/255)
+            adv = attack(input, target)
+            X = adv
+        elif attack_type == "PGD":
+            attack = torchattacks.PGD(model, eps=2/255, steps=4)
+            adv = attack(input, target)
+            X = adv
+        else:
+            X = input  
 
-    return top1.avg, objs.avg
+        logits = model(X)
+        loss = criterion(logits, target)
 
+        pred = logits.argmax(dim=1)
+
+        all_true.extend(target.cpu().numpy())
+        all_pred.extend(pred.cpu().numpy())
+
+        prec1, _ = utils.accuracy(logits, target, topk=(1, 5))
+        objs.update(loss.item(), input.size(0))
+        top1.update(prec1.item(), input.size(0))
+
+    return top1.avg, objs.avg, all_true, all_pred
 
 if __name__ == '__main__':
     main()

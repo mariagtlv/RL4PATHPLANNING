@@ -99,20 +99,13 @@ def main():
             "genotype_reduce": str(genotype.reduce),
             "genotype_full": str(genotype),
             "clean_acc": valid_acc,
+            "clean_loss": valid_loss,
             "train_acc": train_acc,
+            "train_loss": train_loss,
             "f1": f1,
-            "params": params
+            "params": params,
+            "total_time_sec": time.time() - start_time 
         })
-
-    fgsm_acc = utils.eval_fgsm(model, valid_queue)
-    pgd_acc = utils.eval_pgd(model, valid_queue)
-    robustness = pgd_acc
-
-    for row in metrics:
-        row["fgsm_acc"] = fgsm_acc
-        row["pgd_acc"] = pgd_acc
-        row["robustness"] = robustness
-        row["total_time_sec"] = time.time() - start_time
 
     df = pd.DataFrame(metrics)
     df.to_parquet("rep_cnn_darts_training_metrics.parquet", index=False)
