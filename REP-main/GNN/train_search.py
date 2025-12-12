@@ -78,6 +78,8 @@ def main():
         hidden_size, epsilon=args.epsilon, args=args
     ).cuda()
 
+    params = sum(p.numel() for p in model.parameters())
+
     print("param size = %fMB" % utils.count_parameters_in_MB(model))
 
     optimizer = torch.optim.SGD(
@@ -107,29 +109,24 @@ def main():
         valid_acc, valid_loss, valid_f1 = infer_trans(data, model, criterion)
         test_acc, test_loss, test_f1 = infer_trans(data, model, criterion, test=True)
 
+        fgsm_acc, fgsm_loss = infer_adv(data, model, criterion, attack_type="FGSM")
+        pgd_acc, pgd_loss = infer_adv(data, model, criterion, attack_type="PGD")
+
+
+        robustness = 0.5 * (fgsm_acc + pgd_acc)
         scheduler.step()
         explore_num = model.explore_num
 
         metrics.append({
             "timestamp": pd.Timestamp.now(),
             "epoch": epoch,
-            "dataset": args.data,
-            "seed": args.seed,
-            "lr": lr,
-            "train_acc": train_acc,
-            "train_loss": train_loss,
-            "valid_acc": valid_acc,
-            "valid_loss": valid_loss,
-            "valid_f1": valid_f1,
-            "test_acc": test_acc,
-            "test_loss": test_loss,
-            "test_f1": test_f1,
-            "params_MB": utils.count_parameters_in_MB(model),
-            "genotype_normal": str(genotype.normal),
-            "genotype_reduce": str(genotype.reduce),
+            "genotype_normal": str(getattr(genotype, "normal", "-")),
+            "genotype_reduce": str(getattr(genotype, "reduce", "-")),
             "genotype_full": str(genotype),
-            "explore_num": explore_num,
-            "epoch_time_sec": time.time() - epoch_start,
+            "fgsm_acc":fgsm_acc,
+            "pgd_acc":pgd_acc,
+            "robustness":robustness,
+            "params": params
         })
 
         print(f"[Epoch {epoch}] train_acc={train_acc:.4f}, valid_acc={valid_acc:.4f}, test_acc={test_acc:.4f}")
@@ -186,6 +183,54 @@ def infer_trans(data, model, criterion, test=False):
     f1 = f1_score(labels, preds, average="macro")
 
     return acc.item(), loss, f1
+
+def infer_adv(data, model, criterion, attack_type=None):
+    model.eval()
+
+    data = data.to(device)
+    x = data.x.clone().detach().to(device).requires_grad_(True)
+
+    logits = model(data)
+    loss = criterion(logits[data.val_mask], data.y[data.val_mask].to(device))
+
+    if attack_type == "FGSM":
+        loss.backward()
+        eps = 2/255
+        adv_x = x + eps * x.grad.sign()
+        adv_x = adv_x.clamp(x.min(), x.max())
+        data_adv = data.clone()
+        data_adv.x = adv_x
+
+    elif attack_type == "PGD":
+        eps = 2/255
+        alpha = eps / 4
+        steps = 4
+        adv_x = x.clone()
+
+        for _ in range(steps):
+            logits = model(data)
+            loss = criterion(logits[data.val_mask], data.y[data.val_mask].to(device))
+            loss.backward()
+
+            adv_x = adv_x + alpha * adv_x.grad.sign()
+            adv_x = torch.min(torch.max(adv_x, x - eps), x + eps)
+            adv_x = adv_x.clamp(x.min(), x.max())
+            adv_x.grad = None
+
+        data_adv = data.clone()
+        data_adv.x = adv_x
+
+    else:
+        data_adv = data
+
+    logits = model(data_adv)
+    preds = logits[data.val_mask].argmax(dim=1)
+    labels = data.y[data.val_mask]
+
+    acc, _ = utils.accuracy(logits[data.val_mask], labels.to(device), topk=(1, 3))
+    loss = criterion(logits[data.val_mask], labels.to(device)).item()
+
+    return acc.item(), loss
 
 
 def run_by_seed():

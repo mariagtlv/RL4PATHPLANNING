@@ -73,6 +73,8 @@ def main():
 
     print("genotype = {}, param size = {}MB, args = {}".format(genotype, utils.count_parameters_in_MB(model), train_args.__dict__))
 
+    params = sum(p.numel() for p in model.parameters())
+
     optimizer = torch.optim.SGD(
         model.parameters(),
         train_args.learning_rate,
@@ -101,18 +103,20 @@ def main():
         metrics.append({
             "timestamp": pd.Timestamp.now(),
             "epoch": epoch,
-            "lr": scheduler.get_lr()[0],
+
+            "genotype_normal": str(getattr(genotype, "normal", "-")),
+            "genotype_reduce": str(getattr(genotype, "reduce", "-")),   
+            "genotype_full": str(genotype),
+
+            "clean_acc": valid_acc,
+            "clean_loss": valid_loss,
             "train_acc": train_acc,
             "train_loss": train_loss,
-            "valid_acc": valid_acc,
-            "valid_loss": valid_loss,
-            "valid_f1": valid_f1,
-            "test_acc": test_acc,
-            "test_loss": test_loss,
-            "test_f1": test_f1,
-            "param_size_MB": utils.count_parameters_in_MB(model),
-            "genotype": genotype,
-            "epoch_time_sec": time.time() - epoch_start
+            
+            "f1": test_f1,
+
+            "params": params,
+            "total_time_sec": time.time() - epoch_start
         })
 
         print(f"[Epoch {epoch}] train_acc={train_acc:.4f}, valid_acc={valid_acc:.4f}, test_acc={test_acc:.4f}")

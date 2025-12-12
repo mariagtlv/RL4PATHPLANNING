@@ -68,9 +68,8 @@ def main():
     exp_path = "rep_results"
     os.makedirs(exp_path, exist_ok=True)
 
-    # === GENOTYPE (equivalente al script anterior) ===
     op = ['nor_conv_1x1', 'nor_conv_3x3', 'avg_pool_3x3', 'skip_connect', 'none']
-    code = [1, 1, 1, 3, 3, 0]  # REP
+    code = [1, 1, 1, 3, 3, 0]  
 
     genotype = Structure([
         ((op[code[0]], 0),),
@@ -106,7 +105,9 @@ def main():
         model.drop_path_prob = args.drop_path_prob * epoch / args.epochs
         
         train_acc, train_loss = train(train_queue, model, criterion, optimizer)
-        valid_acc, valid_loss, f1 = infer(valid_queue, model, criterion)
+        valid_acc, valid_loss, y_true, y_pred = infer(valid_queue, model, criterion)
+
+        f1 = f1_score(y_true, y_pred, average="macro")
 
         elapsed = time.time() - start_epoch
 
@@ -114,27 +115,22 @@ def main():
             best_acc = valid_acc
             torch.save(model.state_dict(), os.path.join(exp_path, 'best_model.pt'))
 
-        # === Registro compatible con el otro script ===
         record = {
             "timestamp": datetime.now().isoformat(),
             "epoch": epoch,
 
-            # ==== GENOTYPES (equivalente si es posible) ====
-            "genotype_normal": str(genotype),
-            "genotype_reduce": None,   # NATSBench no tiene reduce cells
+            "genotype_normal": str(getattr(genotype, "normal", "-")),
+            "genotype_reduce": str(getattr(genotype, "reduce", "-")),   
             "genotype_full": str(genotype),
-
-            # ==== MÉTRICAS ====
-            "train_acc": train_acc,
-            "train_loss": train_loss,
             "clean_acc": valid_acc,
             "clean_loss": valid_loss,
+            "train_acc": train_acc,
+            "train_loss": train_loss,
+            
             "f1": f1,
 
-            # ==== INFO ADICIONAL ====
             "params": params,
-            "total_time_sec": time.time() - start_time,
-            "elapsed_seconds_epoch": elapsed
+            "total_time_sec": time.time() - start_time
         }
 
         save_metrics_record(record, exp_path)

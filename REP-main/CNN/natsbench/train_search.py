@@ -10,6 +10,7 @@ import pandas as pd
 import os
 from datetime import datetime
 import torchattacks
+from sklearn.metrics import f1_score
 
 from torch.autograd import Variable
 from model_search import TinyNetworkDarts as Network
@@ -114,7 +115,7 @@ def main():
 
         train_acc, train_loss = train(train_queue, valid_queue, model, criterion, optimizer, architect)
 
-        valid_acc_clean, valid_loss_clean = infer(valid_queue, model, criterion)
+        valid_acc_clean, valid_loss_clean, clean_true, clean_pred = infer(valid_queue, model, criterion)
 
         fgsm_acc, fgsm_loss, _, _ = infer(valid_queue, model, criterion, attack_type="FGSM")
 
@@ -127,18 +128,13 @@ def main():
         record = {
             "timestamp": datetime.now().isoformat(),
             "epoch": epoch,
-            "genotype_normal": str(genotype.normal),
-            "genotype_reduce": str(genotype.reduce),
+            "genotype_normal": str(getattr(genotype, "normal", "-")),
+            "genotype_reduce": str(getattr(genotype, "reduce", "-")),
             "genotype_full": str(genotype),
-
-            "clean_acc": valid_acc_clean,
-            "train_acc": train_acc,
-
-            "fgsm_acc": fgsm_acc,
-            "pgd_acc": pgd_acc,
-            "robustness": robustness,
-
-            "params": params,
+            "fgsm_acc":fgsm_acc,
+            "pgd_acc":pgd_acc,
+            "robustness":robustness,
+            "params": params
         }
 
         save_metrics_record(record, exp_path)

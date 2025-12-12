@@ -133,23 +133,18 @@ def main():
             "timestamp": datetime.now().isoformat(),
             "epoch": epoch,
 
+            "genotype_normal": str(getattr(genotype, "normal", "-")),
+            "genotype_reduce": str(getattr(genotype, "reduce", "-")),   
+            "genotype_full": str(genotype),
+
             "clean_acc": valid_acc,
             "clean_loss": valid_loss,
 
             "train_acc": train_acc,
             "train_loss": train_loss,
-
-            "fgsm_acc": fgsm_acc,
-            "pgd_acc": pgd_acc,
-            "robustness": (fgsm_acc + pgd_acc) / 2,
-
-            "f1_score": f1,
-            "execution_time_epoch": time.time() - epoch_start,
+            "f1": f1,
             "params": params,
-
-            "genotype_normal": str(genotype.normal) if hasattr(genotype, "normal") else None,
-            "genotype_reduce": str(genotype.reduce) if hasattr(genotype, "reduce") else None,
-            "genotype_full": str(genotype),
+            "total_time_sec": time.time() - epoch_start,
         }
 
         save_metrics(record)

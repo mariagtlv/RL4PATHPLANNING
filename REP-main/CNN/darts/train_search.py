@@ -56,7 +56,7 @@ def save_architecture_record(exp_path, epoch, genotype, valid_acc_fgsm, valid_ac
         "fgsm_acc": valid_acc_fgsm,
         "pgd_acc": valid_acc_pgd,
         "robustness": 0.5 * (valid_acc_fgsm + valid_acc_pgd),
-        "params": params_count,
+        "params": params_count
     }
 
     df_new = pd.DataFrame([record])

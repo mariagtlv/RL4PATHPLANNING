@@ -120,25 +120,13 @@ def main():
         record = {
             "timestamp": datetime.now().isoformat(),
             "epoch": epoch,
-            "learning_rate": lr,
-
-            "train_acc": train_acc,
-            "train_loss": train_loss,
-
-            "valid_acc": valid_acc,
-            "valid_loss": valid_loss,
-            "f1_score": f1,
-
+            "genotype_normal": str(getattr(genotype, "normal", "-")),
+            "genotype_reduce": str(getattr(genotype, "reduce", "-")),
+            "genotype_full": str(genotype),
             "fgsm_acc": fgsm_acc,
             "pgd_acc": pgd_acc,
             "robustness": robustness,
-
-            "execution_time_epoch": exec_time,
             "params": params,
-
-            "genotype_normal": safe_get(genotype, "normal"),
-            "genotype_reduce": safe_get(genotype, "reduce"),
-            "genotype_full": str(genotype)
         }
 
         save_metrics_record(record, exp_path)
