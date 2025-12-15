@@ -211,38 +211,38 @@ def evaluate(valid_queue, model, criterion):
     pgd_correct = 0
     total = 0
 
-    with torch.no_grad():
-        for inp, target in valid_queue:
-            inp = inp.cuda()
-            target = target.cuda()
+    for inp, target in valid_queue: 
+        inp = inp.cuda()
+        target = target.cuda()
 
+        with torch.no_grad():
             logits = model(inp)
             loss = criterion(logits, target)
             prec1, _ = utils.accuracy(logits, target, topk=(1, 5))
 
-            objs.update(loss.item(), inp.size(0))
-            top1.update(prec1.item(), inp.size(0))
+        objs.update(loss.item(), inp.size(0))
+        top1.update(prec1.item(), inp.size(0))
 
-            preds = torch.argmax(logits, 1)
-            all_preds.extend(preds.cpu().numpy())
-            all_targets.extend(target.cpu().numpy())
+        preds = torch.argmax(logits, 1)
+        all_preds.extend(preds.cpu().numpy())
+        all_targets.extend(target.cpu().numpy())
 
-            adv_fgsm = fgsm_attack(model, inp.clone(), target, eps=args.epsilon)
-            out_fgsm = model(adv_fgsm)
-            fgsm_correct += (torch.argmax(out_fgsm, 1) == target).sum().item()
+        adv_fgsm = fgsm_attack(model, inp.clone(), target, eps=args.epsilon)
+        out_fgsm = model(adv_fgsm)
+        fgsm_correct += (torch.argmax(out_fgsm, 1) == target).sum().item()
 
-            adv_pgd = pgd_attack(model, inp.clone(), target, eps=args.epsilon, alpha=args.step_size, steps=20)
-            out_pgd = model(adv_pgd)
-            pgd_correct += (torch.argmax(out_pgd, 1) == target).sum().item()
+        adv_pgd = pgd_attack(model, inp.clone(), target, eps=args.epsilon, alpha=args.step_size, steps=20)
+        out_pgd = model(adv_pgd)
+        pgd_correct += (torch.argmax(out_pgd, 1) == target).sum().item()
 
-            total += target.size(0)
+        total += target.size(0)
 
     f1 = f1_score(all_targets, all_preds, average="macro")
-
     fgsm_acc = fgsm_correct / total
     pgd_acc = pgd_correct / total
 
     return top1.avg, objs.avg, f1, fgsm_acc, pgd_acc
+
 
 
 def adjust_learning_rate(optimizer, epoch):
