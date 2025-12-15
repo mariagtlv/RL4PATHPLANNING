@@ -188,12 +188,14 @@ def train(train_queue, model, criterion, optimizer):
         nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
         optimizer.step()
 
-        logits = model(inp)
-        prec1, _ = utils.accuracy(logits, target, topk=(1, 5))
-        objs.update(loss.item(), inp.size(0))
-        top1.update(prec1.item(), inp.size(0))
+        with torch.no_grad():
+            logits = model(inp)
+            prec1, _ = utils.accuracy(logits, target, topk=(1, 5))
+            top1.update(prec1.item(), inp.size(0))
+            objs.update(loss.item(), inp.size(0))
 
     return top1.avg, objs.avg
+
 
 
 def evaluate(valid_queue, model, criterion):

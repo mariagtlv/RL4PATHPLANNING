@@ -105,9 +105,7 @@ def main():
         model.drop_path_prob = args.drop_path_prob * epoch / args.epochs
         
         train_acc, train_loss = train(train_queue, model, criterion, optimizer)
-        valid_acc, valid_loss, y_true, y_pred = infer(valid_queue, model, criterion)
-
-        f1 = f1_score(y_true, y_pred, average="macro")
+        valid_acc, valid_loss, f1 = infer(valid_queue, model, criterion)
 
         elapsed = time.time() - start_epoch
 
