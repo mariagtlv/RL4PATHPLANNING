@@ -85,6 +85,7 @@ Install dependencies using:
 
 ```bash
 pip install -r file_name.txt
+´´´
 
 - requirements.txt: general requirements.
 - requirements_ha_enas.txt: requirements for HA-ENAS.
