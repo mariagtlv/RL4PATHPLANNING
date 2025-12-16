@@ -38,6 +38,8 @@ parser.add_argument('--gpu', type=int, default=0)
 parser.add_argument('--epochs', type=int, default=600)
 parser.add_argument('--seed', type=int, default=2)
 parser.add_argument('--grad_clip', type=float, default=5)
+parser.add_argument('--with_linear', action='store_true', default=False)
+parser.add_argument('--fix_last', type=bool, default=False)
 train_args = parser.parse_args()
 
 def main():
@@ -50,10 +52,17 @@ def main():
     cudnn.benchmark=True
     torch.cuda.manual_seed(train_args.seed)
 
+    data_root = osp.join(os.getcwd(), "data")
+
     if train_args.data == 'Cora':
-        dataset = Planetoid('/home/yuqi/data/', 'Cora')
+        dataset = Planetoid(data_root, 'Cora')
     elif train_args.data == 'CiteSeer':
-        dataset = Planetoid('/home/yuqi/data/', 'CiteSeer')
+        dataset = Planetoid(data_root, 'CiteSeer')
+    else:
+        raise ValueError(
+            f"Unknown dataset '{train_args.data}'. "
+            "Valid options are: 'Cora' or 'CiteSeer'."
+        )
 
     genotype = 'gat_cos||gin||gat_generalized_linear||skip||skip||skip||l_concat'
     hidden_size = train_args.hidden_size

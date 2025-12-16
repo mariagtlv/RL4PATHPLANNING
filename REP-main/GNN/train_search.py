@@ -59,10 +59,17 @@ def main():
 
     print("args = ", args.__dict__)
 
+    data_root = osp.join(os.getcwd(), "data")
+
     if args.data == 'Cora':
-        dataset = Planetoid('/home/yuqi/data/', 'Cora')
+        dataset = Planetoid(data_root, 'Cora')
     elif args.data == 'CiteSeer':
-        dataset = Planetoid('/home/yuqi/data/', 'CiteSeer')
+        dataset = Planetoid(data_root, 'CiteSeer')
+    else:
+        raise ValueError(
+            f"Unknown dataset '{args.data}'. "
+            "Valid options are: 'Cora' or 'CiteSeer'."
+        )
 
     raw_dir = dataset.raw_dir
     data = dataset[0]
@@ -136,7 +143,7 @@ def main():
         m["total_time_sec"] = total_time
 
     df = pd.DataFrame(metrics)
-    out_path = f"rep_gnn_results.parquet"
+    out_path = f"rep_results/rep_gnn_results.parquet"
     df.to_parquet(out_path, index=False)
     print(f"\nMetrics saved to: {out_path}\n")
 
@@ -185,52 +192,62 @@ def infer_trans(data, model, criterion, test=False):
     return acc.item(), loss, f1
 
 def infer_adv(data, model, criterion, attack_type=None):
-    model.eval()
+    model.train()
 
     data = data.to(device)
-    x = data.x.clone().detach().to(device).requires_grad_(True)
+    x = data.x.clone().detach().to(device)
+    x.requires_grad_(True)
+
+    data_adv = data.clone()
+    data_adv.x = x
 
     logits = model(data)
     loss = criterion(logits[data.val_mask], data.y[data.val_mask].to(device))
 
     if attack_type == "FGSM":
+        logits = model(data_adv)
+        loss = criterion(logits[data.val_mask], data.y[data.val_mask].to(device))
+
         loss.backward()
-        eps = 2/255
+
+        eps = 2 / 255
         adv_x = x + eps * x.grad.sign()
         adv_x = adv_x.clamp(x.min(), x.max())
-        data_adv = data.clone()
+
         data_adv.x = adv_x
 
+
     elif attack_type == "PGD":
-        eps = 2/255
+        eps = 2 / 255
         alpha = eps / 4
         steps = 4
-        adv_x = x.clone()
+
+        adv_x = x.clone().detach()
 
         for _ in range(steps):
-            logits = model(data)
+            adv_x.requires_grad_(True)
+            data_adv.x = adv_x
+
+            logits = model(data_adv)
             loss = criterion(logits[data.val_mask], data.y[data.val_mask].to(device))
             loss.backward()
 
             adv_x = adv_x + alpha * adv_x.grad.sign()
             adv_x = torch.min(torch.max(adv_x, x - eps), x + eps)
-            adv_x = adv_x.clamp(x.min(), x.max())
-            adv_x.grad = None
+            adv_x = adv_x.clamp(x.min(), x.max()).detach()
 
-        data_adv = data.clone()
-        data_adv.x = adv_x
 
     else:
         data_adv = data
 
     logits = model(data_adv)
-    preds = logits[data.val_mask].argmax(dim=1)
     labels = data.y[data.val_mask]
 
     acc, _ = utils.accuracy(logits[data.val_mask], labels.to(device), topk=(1, 3))
     loss = criterion(logits[data.val_mask], labels.to(device)).item()
 
     return acc.item(), loss
+
 
 
 def run_by_seed():

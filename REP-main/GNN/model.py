@@ -86,6 +86,7 @@ class NetworkGNN(nn.Module):
         self._criterion = criterion
         ops = genotype.split('||')
         self.args = args
+        self.args.with_layernorm = getattr(args, 'with_layernorm', False)
 
         #node aggregator op
         self.lin1 = nn.Linear(in_dim, hidden_size)
