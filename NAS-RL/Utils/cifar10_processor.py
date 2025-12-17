@@ -3,7 +3,9 @@ import logging
 import numpy as np
 import tensorflow as tf
 from keras.datasets import cifar10
-from keras.utils import np_utils
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
+
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +34,8 @@ def get_tf_datasets_from_numpy(batch_size, validation_split=0.1):
 
     # Turn labels into onehot encodings
     if y.shape[1] != 10:
-        y = np_utils.to_categorical(y, num_classes=10)
-        y_test = np_utils.to_categorical(y_test, num_classes=10)
+        y = to_categorical(y, num_classes=10)
+        y_test = to_categorical(y_test, num_classes=10)
 
     logger.info("Loaded data from keras")
 

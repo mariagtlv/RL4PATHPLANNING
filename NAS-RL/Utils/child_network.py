@@ -1,6 +1,7 @@
 import logging
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +56,12 @@ def ChildCNN(object):
                         bias_initializer=tf.zeros_initializer(),
                         kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=self.beta))
                 # We apply 2D max pooling on the output of the conv layer
-                output = tf.layers.max_pooling2d(
+            output = tf.layers.max_pooling2d(
                     output, pool_size=(max_pool_size, max_pool_size), strides=1,
                     padding="SAME", name="pool_out_{}".format(idx)
                 )
                 # Dropout to regularize the network further
-                output = tf.layers.dropout(output, rate=self.drop_rate, training=self.is_training)
+            output = tf.layers.dropout(output, rate=self.drop_rate, training=self.is_training)
         
         # Flatten outputs of the CNN and add a fully connected layers
         with tf.name_scope("child_{}_fully_connected".format(self.child_id)):

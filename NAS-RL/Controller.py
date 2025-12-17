@@ -1,16 +1,18 @@
 import logging
 
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+
 
 from Utils.child_network import ChildCNN
 from Utils.cifar10_processor import get_tf_datasets_from_numpy
-from Utils.config import child_network_params, controller_params
+from Utils.configs import child_network_params, controller_params
 
 import pandas as pd
 import time
 from sklearn.metrics import f1_score
 
+tf.disable_v2_behavior()
 logger = logging.getLogger(__name__)
 
 def count_tf_params(scope=None):
