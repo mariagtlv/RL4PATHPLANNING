@@ -16,6 +16,9 @@ import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
 from model import NetworkCIFAR as Network
 
+import pandas as pd
+from datetime import datetime
+from sklearn.metrics import f1_score
 
 parser = argparse.ArgumentParser("cifar")
 parser.add_argument('--data', type=str, default='../data', help='location of the data corpus')
@@ -94,18 +97,43 @@ def main():
 
   scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, float(args.epochs))
 
+  metrics = []
+
   for epoch in range(args.epochs):
     scheduler.step()
     logging.info('epoch %d lr %e', epoch, scheduler.get_lr()[0])
     model.drop_path_prob = args.drop_path_prob * epoch / args.epochs
-
-    train_acc, train_obj = train(train_queue, model, criterion, optimizer)
+    epoch_start = time.time()
+    train_acc, train_loss = train(train_queue, model, criterion, optimizer)
     logging.info('train_acc %f', train_acc)
 
-    valid_acc, valid_obj = infer(valid_queue, model, criterion)
+    valid_acc, valid_loss, f1 = infer(valid_queue, model, criterion)
     logging.info('valid_acc %f', valid_acc)
-
+    epoch_time = time.time() - epoch_start
     utils.save(model, os.path.join(args.save, 'weights.pt'))
+
+    genotype = model.genotype()
+
+    metrics.append({
+        "timestamp": datetime.now(),
+        "epoch": epoch,
+        "genotype_normal": str(genotype.normal),
+        "genotype_reduce": str(genotype.reduce),
+        "genotype_full": str(genotype),
+        "train_acc": train_acc,
+        "train_loss": train_loss,
+        "valid_acc": valid_acc,
+        "valid_loss": valid_loss,
+        "f1_macro": f1,
+        "num_params": utils.count_parameters_in_MB(model),
+        "epoch_time_sec": epoch_time
+    })
+
+  df = pd.DataFrame(metrics)
+  df.to_parquet(os.path.join(args.save, "eval_metrics.parquet"))
+  print("Metrics saved to eval_metrics.parquet")
+
+
 
 
 def train(train_queue, model, criterion, optimizer):
@@ -116,7 +144,7 @@ def train(train_queue, model, criterion, optimizer):
 
   for step, (input, target) in enumerate(train_queue):
     input = Variable(input).cuda()
-    target = Variable(target).cuda(async=True)
+    target = Variable(target).cuda()
 
     optimizer.zero_grad()
     logits, logits_aux = model(input)
@@ -130,9 +158,9 @@ def train(train_queue, model, criterion, optimizer):
 
     prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
     n = input.size(0)
-    objs.update(loss.data[0], n)
-    top1.update(prec1.data[0], n)
-    top5.update(prec5.data[0], n)
+    objs.update(loss.item(), n)
+    top1.update(prec1.item(), n)
+    top5.update(prec5.item(), n)
 
     if step % args.report_freq == 0:
       logging.info('train %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
@@ -143,26 +171,35 @@ def train(train_queue, model, criterion, optimizer):
 def infer(valid_queue, model, criterion):
   objs = utils.AvgrageMeter()
   top1 = utils.AvgrageMeter()
-  top5 = utils.AvgrageMeter()
   model.eval()
 
-  for step, (input, target) in enumerate(valid_queue):
-    input = Variable(input, volatile=True).cuda()
-    target = Variable(target, volatile=True).cuda(async=True)
+  all_preds = []
+  all_targets = []
 
-    logits, _ = model(input)
-    loss = criterion(logits, target)
+  with torch.no_grad():
+    for step, (input, target) in enumerate(valid_queue):
+      input = input.cuda()
+      target = target.cuda()
 
-    prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
-    n = input.size(0)
-    objs.update(loss.data[0], n)
-    top1.update(prec1.data[0], n)
-    top5.update(prec5.data[0], n)
+      logits, _ = model(input)
+      loss = criterion(logits, target)
 
-    if step % args.report_freq == 0:
-      logging.info('valid %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
+      preds = torch.argmax(logits, dim=1)
 
-  return top1.avg, objs.avg
+      all_preds.append(preds.cpu())
+      all_targets.append(target.cpu())
+
+      prec1 = utils.accuracy(logits, target, topk=(1,))[0]
+      n = input.size(0)
+      objs.update(loss.item(), n)
+      top1.update(prec1.item(), n)
+
+  all_preds = torch.cat(all_preds).numpy()
+  all_targets = torch.cat(all_targets).numpy()
+  f1 = f1_score(all_targets, all_preds, average="macro")
+
+  return top1.avg, objs.avg, f1
+
 
 
 if __name__ == '__main__':
