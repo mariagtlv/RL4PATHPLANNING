@@ -112,22 +112,26 @@ def main():
     epoch_time = time.time() - epoch_start
     utils.save(model, os.path.join(args.save, 'weights.pt'))
 
-    genotype = model.genotype()
-
     metrics.append({
-        "timestamp": datetime.now(),
-        "epoch": epoch,
-        "genotype_normal": str(genotype.normal),
-        "genotype_reduce": str(genotype.reduce),
-        "genotype_full": str(genotype),
-        "train_acc": train_acc,
-        "train_loss": train_loss,
-        "valid_acc": valid_acc,
-        "valid_loss": valid_loss,
-        "f1_macro": f1,
-        "num_params": utils.count_parameters_in_MB(model),
-        "epoch_time_sec": epoch_time
+    "timestamp": datetime.now(),
+    "epoch": epoch,
+    "genotype_normal": str(genotype.normal),
+    "genotype_reduce": str(genotype.reduce),
+    "genotype_full": str(genotype),
+    "train_acc": train_acc,
+    "train_loss": train_loss,
+    "valid_acc": valid_acc,
+    "valid_loss": valid_loss,
+    "f1_macro": f1,
+    "num_params": utils.count_parameters_in_MB(model),
+    "total_time": epoch_time
     })
+
+    pd.DataFrame(metrics).to_parquet(
+    os.path.join(args.save, "eval_metrics.parquet"),
+    index=False
+  )
+
 
   df = pd.DataFrame(metrics)
   df.to_parquet(os.path.join(args.save, "eval_metrics.parquet"))
