@@ -76,3 +76,19 @@ DARTS_V2 = Genotype(normal=[('sep_conv_3x3', 0), ('sep_conv_3x3', 1), ('sep_conv
 
 DARTS = DARTS_V2
 
+MySearchNet = Genotype(
+  normal=[
+    ('skip_connect', 0), ('sep_conv_5x5', 1),
+    ('skip_connect', 0), ('sep_conv_3x3', 1),
+    ('skip_connect', 0), ('sep_conv_5x5', 1),
+    ('skip_connect', 0), ('dil_conv_5x5', 1),
+  ],
+  normal_concat=[2, 3, 4, 5],
+  reduce=[
+    ('avg_pool_3x3', 0), ('sep_conv_5x5', 1),
+    ('avg_pool_3x3', 0), ('dil_conv_3x3', 2),
+    ('skip_connect', 3), ('avg_pool_3x3', 0),
+    ('avg_pool_3x3', 0), ('skip_connect', 3),
+  ],
+  reduce_concat=[2, 3, 4, 5],
+)
