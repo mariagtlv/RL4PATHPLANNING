@@ -1,11 +1,10 @@
 import logging
 
-import tensorflow.compat.v1 as tf
-tf.disable_v2_behavior()
+import tensorflow as tf
 
 logger = logging.getLogger(__name__)
 
-def ChildCNN(object):
+class ChildCNN(object):
 
     def __init__(self, cnn_dna, child_id, beta=1e-4, drop_rate=0.2, **kwargs):
         self.cnn_dna = self.process_raw_controller_output(cnn_dna)

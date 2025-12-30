@@ -1,0 +1,12 @@
+services:
+  exp:
+    build: .
+    container_name: nas-rl
+    volumes:
+      - .:/exp
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]

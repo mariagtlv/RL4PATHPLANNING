@@ -1,24 +1,17 @@
 import logging
 
 import numpy as np
-import tensorflow.compat.v1 as tf
-
+import tensorflow as tf
 
 from Utils.child_network import ChildCNN
 from Utils.cifar10_processor import get_tf_datasets_from_numpy
-from Utils.configs import child_network_params, controller_params
+from Utils.config import child_network_params, controller_params
 
 import pandas as pd
 import time
 from sklearn.metrics import f1_score
 
-tf.disable_v2_behavior()
 logger = logging.getLogger(__name__)
-
-def count_tf_params(scope=None):
-    vars_ = tf.trainable_variables(scope=scope)
-    return int(np.sum([np.prod(v.shape.as_list()) for v in vars_]))
-
 
 def ema(values):
     """
@@ -44,10 +37,7 @@ class Controller(object):
         self.reward_history = []
         self.architecture_history = []
         self.divison_rate = 100
-
-        self.search_metrics = []
         self.training_metrics = []
-
         with self.graph.as_default():
             self.build_controller()
 
@@ -123,7 +113,6 @@ class Controller(object):
         Returns:
             (float) validation accuracy
         """
-        start_time = time.time()
         logger.info("Training with dna: {}".format(cnn_dna))
         child_graph = tf.Graph()
         with child_graph.as_default():
@@ -131,7 +120,6 @@ class Controller(object):
 
             child_network = ChildCNN(cnn_dna=cnn_dna, child_id=child_id, **child_network_params)
 
-            num_params = count_tf_params()
             start_time = time.time()
 
             # Create input pipeline
@@ -187,7 +175,6 @@ class Controller(object):
                     epoch_labels.extend(labs)
 
                 train_f1 = f1_score(epoch_labels, epoch_preds, average="macro")
-
                 logger.info("\tEpoch {}:\tloss - {:.6f}\taccuracy - {:.3f}".format(epoch_idx,
                                                                                    np.mean(avg_loss), np.mean(avg_acc)))
                 self.training_metrics.append({
@@ -197,7 +184,6 @@ class Controller(object):
                     "train_accuracy": float(np.mean(avg_acc)),
                     "train_loss": float(np.mean(avg_loss)),
                    "train_f1": float(train_f1), 
-                    "params": num_params,
                     "total_time_sec": time.time() - start_time
                 })
 
@@ -209,6 +195,7 @@ class Controller(object):
             all_preds = []
             all_labels = []
 
+
             for batch_idx in range(num_valid_batches):
                 valid_loss, valid_accuracy, preds, labs = sess.run(
                     [loss_ops, accuracy_ops,
@@ -219,9 +206,9 @@ class Controller(object):
                 avg_val_acc.append(valid_accuracy)
                 all_preds.extend(preds)
                 all_labels.extend(labs)
-            val_f1 = f1_score(all_labels, all_preds, average="macro")
             logger.info("Valid loss - {:.6f}\tValid accuracy - {:.3f}".format(np.mean(avg_val_loss),
                                                                               np.mean(avg_val_acc)))
+            val_f1 = f1_score(all_labels, all_preds, average="macro")
             self.training_metrics.append({
                 "timestamp": pd.Timestamp.now(),
                 "epoch": "final",
@@ -229,12 +216,10 @@ class Controller(object):
                 "val_accuracy": float(np.mean(avg_val_acc)),
                 "clean_loss": float(np.mean(avg_val_loss)),
                 "f1": float(val_f1),
-                "params": num_params,
                 "total_time_sec": time.time() - start_time
             })
 
-
-        return np.mean(avg_val_acc), num_params
+        return np.mean(avg_val_acc)
 
     def train_controller(self):
         with self.graph.as_default():
@@ -256,21 +241,12 @@ class Controller(object):
 
                 if np.any(np.less_equal(child_network_architecture, 0.0)):
                     reward = -1.0
-                    child_params=-1
                 else:
-                    reward, child_params = self.train_child_network(cnn_dna=child_network_architecture,
+                    reward = self.train_child_network(cnn_dna=child_network_architecture,
                                                       child_id='child/{}'.format("{}_{}".format(episode, sub_child)))
                 episode_reward_buffer.append(reward)
 
             mean_reward = np.mean(episode_reward_buffer)
-
-            self.search_metrics.append({
-                "timestamp": pd.Timestamp.now(),
-                "epoch": episode,
-                "genotype_full": str(child_network_architecture.ravel()),
-                "valid_acc": mean_reward,
-                "params": child_params
-            })
 
             self.reward_history.append(mean_reward)
             self.architecture_history.append(child_network_architecture)
@@ -293,13 +269,6 @@ class Controller(object):
             logger.info('Episode: {} | Loss: {} | DNA: {} | Reward : {}'.format(
                 episode, loss, child_network_architecture.ravel(), mean_reward))
             
-            pd.DataFrame(self.search_metrics).to_parquet(
-                "controller_search_results.parquet", index=False
-            )
-
             pd.DataFrame(self.training_metrics).to_parquet(
                 "child_training_results.parquet", index=False
             )
-
-            logger.info("Saved controller_search_results.parquet")
-            logger.info("Saved child_training_results.parquet")
