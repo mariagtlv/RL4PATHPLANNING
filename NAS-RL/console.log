@@ -1,0 +1,303 @@
+2025-12-30 12:19:52,435 tensorflow   WARNING  From /exp/Controller.py:35: The name tf.Session is deprecated. Please use tf.compat.v1.Session instead.
+
+2025-12-30 12:19:52,446 Controller   INFO     Building controller network
+2025-12-30 12:19:52,446 tensorflow   WARNING  From /exp/Controller.py:63: The name tf.placeholder is deprecated. Please use tf.compat.v1.placeholder instead.
+
+2025-12-30 12:19:52,447 tensorflow   WARNING  From /exp/Controller.py:70: The name tf.variable_scope is deprecated. Please use tf.compat.v1.variable_scope instead.
+
+2025-12-30 12:19:52,447 tensorflow   WARNING  
+The TensorFlow contrib module will not be included in TensorFlow 2.0.
+For more information, please see:
+  * https://github.com/tensorflow/community/blob/master/rfcs/20180907-contrib-sunset.md
+  * https://github.com/tensorflow/addons
+  * https://github.com/tensorflow/io (for I/O related ops)
+If you depend on functionality not listed there, please file an issue.
+
+2025-12-30 12:19:52,649 tensorflow   WARNING  From /exp/Controller.py:49: dynamic_rnn (from tensorflow.python.ops.rnn) is deprecated and will be removed in a future version.
+Instructions for updating:
+Please use `keras.layers.RNN(cell)`, which is equivalent to this API
+2025-12-30 12:19:52,668 tensorflow   WARNING  From /usr/local/lib/python3.6/dist-packages/tensorflow_core/contrib/rnn/python/ops/rnn_cell.py:1529: Layer.add_variable (from tensorflow.python.keras.engine.base_layer) is deprecated and will be removed in a future version.
+Instructions for updating:
+Please use `layer.add_weight` method instead.
+2025-12-30 12:19:52,689 tensorflow   WARNING  From /exp/Controller.py:78: The name tf.train.exponential_decay is deprecated. Please use tf.compat.v1.train.exponential_decay instead.
+
+2025-12-30 12:19:52,690 tensorflow   WARNING  From /exp/Controller.py:79: The name tf.train.RMSPropOptimizer is deprecated. Please use tf.compat.v1.train.RMSPropOptimizer instead.
+
+2025-12-30 12:19:52,691 tensorflow   WARNING  From /exp/Controller.py:86: softmax_cross_entropy_with_logits (from tensorflow.python.ops.nn_ops) is deprecated and will be removed in a future version.
+Instructions for updating:
+
+Future major versions of TensorFlow will allow gradients to flow
+into the labels input on backprop by default.
+
+See `tf.nn.softmax_cross_entropy_with_logits_v2`.
+
+2025-12-30 12:19:52,698 tensorflow   WARNING  From /exp/Controller.py:89: The name tf.trainable_variables is deprecated. Please use tf.compat.v1.trainable_variables instead.
+
+2025-12-30 12:19:52,827 tensorflow   WARNING  From /usr/local/lib/python3.6/dist-packages/tensorflow_core/python/training/rmsprop.py:119: calling Ones.__init__ (from tensorflow.python.ops.init_ops) with dtype is deprecated and will be removed in a future version.
+Instructions for updating:
+Call initializer instance with the dtype argument instead of passing it to the constructor
+2025-12-30 12:19:52,837 Controller   INFO     Successfully built controller
+2025-12-30 12:19:52,837 tensorflow   WARNING  From /exp/Controller.py:226: The name tf.global_variables_initializer is deprecated. Please use tf.compat.v1.global_variables_initializer instead.
+
+2025-12-30 12:19:52,853 Controller   INFO     =============> Episode 0 for Controller
+2025-12-30 12:19:52,871 Controller   INFO     Training with dna: [[1 1 1 8 1 1 2 3 1 1 2 2]]
+2025-12-30 12:19:52,872 tensorflow   WARNING  From /exp/Utils/child_network.py:14: The name tf.placeholder_with_default is deprecated. Please use tf.compat.v1.placeholder_with_default instead.
+
+Downloading data from https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz
+
+     8192/170498071 [..............................] - ETA: 36:46
+    40960/170498071 [..............................] - ETA: 14:48
+    98304/170498071 [..............................] - ETA: 9:14 
+   147456/170498071 [..............................] - ETA: 8:13
+   262144/170498071 [..............................] - ETA: 5:47
+   466944/170498071 [..............................] - ETA: 3:53
+   892928/170498071 [..............................] - ETA: 2:22
+  1744896/170498071 [..............................] - ETA: 1:22
+  3416064/170498071 [..............................] - ETA: 44s 
+  3440640/170498071 [..............................] - ETA: 46s
+  6750208/170498071 [>.............................] - ETA: 24s
+  6840320/170498071 [>.............................] - ETA: 25s
+ 10526720/170498071 [>.............................] - ETA: 18s
+ 13860864/170498071 [=>............................] - ETA: 14s
+ 17055744/170498071 [==>...........................] - ETA: 12s
+ 20168704/170498071 [==>...........................] - ETA: 11s
+ 23371776/170498071 [===>..........................] - ETA: 10s
+ 26574848/170498071 [===>..........................] - ETA: 9s 
+ 29769728/170498071 [====>.........................] - ETA: 8s
+ 32972800/170498071 [====>.........................] - ETA: 8s
+ 36241408/170498071 [=====>........................] - ETA: 7s
+ 39510016/170498071 [=====>........................] - ETA: 7s
+ 42688512/170498071 [======>.......................] - ETA: 6s
+ 45826048/170498071 [=======>......................] - ETA: 6s
+ 49037312/170498071 [=======>......................] - ETA: 6s
+ 52297728/170498071 [========>.....................] - ETA: 5s
+ 55500800/170498071 [========>.....................] - ETA: 5s
+ 58712064/170498071 [=========>....................] - ETA: 5s
+ 61964288/170498071 [=========>....................] - ETA: 5s
+ 65167360/170498071 [==========>...................] - ETA: 4s
+ 68419584/170498071 [===========>..................] - ETA: 4s
+ 71606272/170498071 [===========>..................] - ETA: 4s
+ 74801152/170498071 [============>.................] - ETA: 4s
+ 78004224/170498071 [============>.................] - ETA: 4s
+ 81215488/170498071 [=============>................] - ETA: 4s
+ 84410368/170498071 [=============>................] - ETA: 3s
+ 87605248/170498071 [==============>...............] - ETA: 3s
+ 90783744/170498071 [==============>...............] - ETA: 3s
+ 93978624/170498071 [===============>..............] - ETA: 3s
+ 97124352/170498071 [================>.............] - ETA: 3s
+100384768/170498071 [================>.............] - ETA: 3s
+103653376/170498071 [=================>............] - ETA: 2s
+106856448/170498071 [=================>............] - ETA: 2s
+110084096/170498071 [==================>...........] - ETA: 2s
+113287168/170498071 [==================>...........] - ETA: 2s
+116555776/170498071 [===================>..........] - ETA: 2s
+119816192/170498071 [====================>.........] - ETA: 2s
+122937344/170498071 [====================>.........] - ETA: 1s
+126140416/170498071 [=====================>........] - ETA: 1s
+129466368/170498071 [=====================>........] - ETA: 1s
+132677632/170498071 [======================>.......] - ETA: 1s
+135888896/170498071 [======================>.......] - ETA: 1s
+139083776/170498071 [=======================>......] - ETA: 1s
+142286848/170498071 [========================>.....] - ETA: 1s
+145489920/170498071 [========================>.....] - ETA: 1s
+148758528/170498071 [=========================>....] - ETA: 0s
+151568384/170498071 [=========================>....] - ETA: 0s
+152092672/170498071 [=========================>....] - ETA: 0s
+155164672/170498071 [==========================>...] - ETA: 0s
+158040064/170498071 [==========================>...] - ETA: 0s
+158367744/170498071 [==========================>...] - ETA: 0s
+161062912/170498071 [===========================>..] - ETA: 0s
+161447936/170498071 [===========================>..] - ETA: 0s
+164126720/170498071 [===========================>..] - ETA: 0s
+164511744/170498071 [===========================>..] - ETA: 0s
+167067648/170498071 [============================>.] - ETA: 0s
+167583744/170498071 [============================>.] - ETA: 0s
+170500096/170498071 [==============================] - 7s 0us/step
+2025-12-30 12:20:00,865 Utils.cifar10_processor INFO     Dividing pixels by 255
+2025-12-30 12:20:01,160 Utils.cifar10_processor INFO     Loaded data from keras
+2025-12-30 12:20:02,739 tensorflow   WARNING  From /exp/Controller.py:130: The name tf.data.Iterator is deprecated. Please use tf.compat.v1.data.Iterator instead.
+
+2025-12-30 12:20:02,739 tensorflow   WARNING  From /exp/Controller.py:130: DatasetV1.output_types (from tensorflow.python.data.ops.dataset_ops) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use `tf.compat.v1.data.get_output_types(dataset)`.
+2025-12-30 12:20:02,739 tensorflow   WARNING  From /exp/Controller.py:130: DatasetV1.output_shapes (from tensorflow.python.data.ops.dataset_ops) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use `tf.compat.v1.data.get_output_shapes(dataset)`.
+2025-12-30 12:20:02,741 tensorflow   WARNING  From /usr/local/lib/python3.6/dist-packages/tensorflow_core/python/data/ops/iterator_ops.py:347: Iterator.output_types (from tensorflow.python.data.ops.iterator_ops) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use `tf.compat.v1.data.get_output_types(iterator)`.
+2025-12-30 12:20:02,741 tensorflow   WARNING  From /usr/local/lib/python3.6/dist-packages/tensorflow_core/python/data/ops/iterator_ops.py:348: Iterator.output_shapes (from tensorflow.python.data.ops.iterator_ops) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use `tf.compat.v1.data.get_output_shapes(iterator)`.
+2025-12-30 12:20:02,741 tensorflow   WARNING  From /usr/local/lib/python3.6/dist-packages/tensorflow_core/python/data/ops/iterator_ops.py:350: Iterator.output_classes (from tensorflow.python.data.ops.iterator_ops) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use `tf.compat.v1.data.get_output_classes(iterator)`.
+2025-12-30 12:20:02,741 Utils.child_network INFO     DNA is : [[1, 1, 1, 8], [1, 1, 2, 3], [1, 1, 2, 2]]
+2025-12-30 12:20:02,742 tensorflow   WARNING  From /exp/Utils/child_network.py:56: conv2d (from tensorflow.python.layers.convolutional) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use `tf.keras.layers.Conv2D` instead.
+2025-12-30 12:20:02,743 tensorflow   WARNING  From /usr/local/lib/python3.6/dist-packages/tensorflow_core/python/layers/convolutional.py:424: Layer.apply (from tensorflow.python.keras.engine.base_layer) is deprecated and will be removed in a future version.
+Instructions for updating:
+Please use `layer.__call__` method instead.
+2025-12-30 12:20:02,749 tensorflow   WARNING  From /exp/Utils/child_network.py:60: max_pooling2d (from tensorflow.python.layers.pooling) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use keras.layers.MaxPooling2D instead.
+2025-12-30 12:20:02,749 tensorflow   WARNING  From /exp/Utils/child_network.py:63: dropout (from tensorflow.python.layers.core) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use keras.layers.dropout instead.
+2025-12-30 12:20:02,774 tensorflow   WARNING  From /exp/Utils/child_network.py:67: flatten (from tensorflow.python.layers.core) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use keras.layers.flatten instead.
+2025-12-30 12:20:02,776 tensorflow   WARNING  From /exp/Utils/child_network.py:68: dense (from tensorflow.python.layers.core) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use keras.layers.Dense instead.
+2025-12-30 12:20:02,787 tensorflow   WARNING  From /exp/Controller.py:147: The name tf.train.AdamOptimizer is deprecated. Please use tf.compat.v1.train.AdamOptimizer instead.
+
+2025-12-30 12:20:05,312 Controller   INFO     Training child CNN child/0_0 for 100 epochs
+2025-12-30 12:23:26,709 Controller   INFO     	Epoch 0:	loss - 2.302593	accuracy - 0.098
+2025-12-30 12:32:49,761 Controller   INFO     	Epoch 1:	loss - 2.302592	accuracy - 0.098
+2025-12-30 12:50:32,674 Controller   INFO     	Epoch 2:	loss - 2.302591	accuracy - 0.098
+2025-12-30 13:17:55,427 Controller   INFO     	Epoch 3:	loss - 2.302590	accuracy - 0.098
+2025-12-30 13:55:01,463 Controller   INFO     	Epoch 4:	loss - 2.302589	accuracy - 0.097
+2025-12-30 14:42:24,506 Controller   INFO     	Epoch 5:	loss - 2.302588	accuracy - 0.098
+2025-12-30 15:40:49,266 Controller   INFO     	Epoch 6:	loss - 2.302588	accuracy - 0.099
+2025-12-30 16:49:36,152 Controller   INFO     	Epoch 7:	loss - 2.302588	accuracy - 0.098
+2025-12-30 18:08:32,015 Controller   INFO     	Epoch 8:	loss - 2.302586	accuracy - 0.099
+2025-12-30 19:37:32,989 Controller   INFO     	Epoch 9:	loss - 2.302587	accuracy - 0.099
+2025-12-30 21:16:42,900 Controller   INFO     	Epoch 10:	loss - 2.302586	accuracy - 0.099
+2025-12-30 23:06:19,164 Controller   INFO     	Epoch 11:	loss - 2.302586	accuracy - 0.099
+2025-12-31 01:07:08,790 Controller   INFO     	Epoch 12:	loss - 2.302586	accuracy - 0.099
+2025-12-31 03:18:19,418 Controller   INFO     	Epoch 13:	loss - 2.302586	accuracy - 0.099
+2025-12-31 05:39:34,327 Controller   INFO     	Epoch 14:	loss - 2.302585	accuracy - 0.099
+2025-12-31 08:11:21,294 Controller   INFO     	Epoch 15:	loss - 2.302585	accuracy - 0.100
+2025-12-31 10:53:37,741 Controller   INFO     	Epoch 16:	loss - 2.302585	accuracy - 0.100
+2025-12-31 13:53:24,584 Controller   INFO     	Epoch 17:	loss - 2.302585	accuracy - 0.100
+2025-12-31 17:02:54,400 Controller   INFO     	Epoch 18:	loss - 2.302585	accuracy - 0.099
+2026-01-07 12:00:20,580 tensorflow   WARNING  From /exp/Controller.py:35: The name tf.Session is deprecated. Please use tf.compat.v1.Session instead.
+
+2026-01-07 12:00:20,596 Controller   INFO     Building controller network
+2026-01-07 12:00:20,596 tensorflow   WARNING  From /exp/Controller.py:63: The name tf.placeholder is deprecated. Please use tf.compat.v1.placeholder instead.
+
+2026-01-07 12:00:20,597 tensorflow   WARNING  From /exp/Controller.py:70: The name tf.variable_scope is deprecated. Please use tf.compat.v1.variable_scope instead.
+
+2026-01-07 12:00:20,597 tensorflow   WARNING  
+The TensorFlow contrib module will not be included in TensorFlow 2.0.
+For more information, please see:
+  * https://github.com/tensorflow/community/blob/master/rfcs/20180907-contrib-sunset.md
+  * https://github.com/tensorflow/addons
+  * https://github.com/tensorflow/io (for I/O related ops)
+If you depend on functionality not listed there, please file an issue.
+
+2026-01-07 12:00:20,912 tensorflow   WARNING  From /exp/Controller.py:49: dynamic_rnn (from tensorflow.python.ops.rnn) is deprecated and will be removed in a future version.
+Instructions for updating:
+Please use `keras.layers.RNN(cell)`, which is equivalent to this API
+2026-01-07 12:00:20,935 tensorflow   WARNING  From /usr/local/lib/python3.6/dist-packages/tensorflow_core/contrib/rnn/python/ops/rnn_cell.py:1529: Layer.add_variable (from tensorflow.python.keras.engine.base_layer) is deprecated and will be removed in a future version.
+Instructions for updating:
+Please use `layer.add_weight` method instead.
+2026-01-07 12:00:20,955 tensorflow   WARNING  From /exp/Controller.py:78: The name tf.train.exponential_decay is deprecated. Please use tf.compat.v1.train.exponential_decay instead.
+
+2026-01-07 12:00:20,957 tensorflow   WARNING  From /exp/Controller.py:79: The name tf.train.RMSPropOptimizer is deprecated. Please use tf.compat.v1.train.RMSPropOptimizer instead.
+
+2026-01-07 12:00:20,958 tensorflow   WARNING  From /exp/Controller.py:86: softmax_cross_entropy_with_logits (from tensorflow.python.ops.nn_ops) is deprecated and will be removed in a future version.
+Instructions for updating:
+
+Future major versions of TensorFlow will allow gradients to flow
+into the labels input on backprop by default.
+
+See `tf.nn.softmax_cross_entropy_with_logits_v2`.
+
+2026-01-07 12:00:20,967 tensorflow   WARNING  From /exp/Controller.py:89: The name tf.trainable_variables is deprecated. Please use tf.compat.v1.trainable_variables instead.
+
+2026-01-07 12:00:21,096 tensorflow   WARNING  From /usr/local/lib/python3.6/dist-packages/tensorflow_core/python/training/rmsprop.py:119: calling Ones.__init__ (from tensorflow.python.ops.init_ops) with dtype is deprecated and will be removed in a future version.
+Instructions for updating:
+Call initializer instance with the dtype argument instead of passing it to the constructor
+2026-01-07 12:00:21,106 Controller   INFO     Successfully built controller
+2026-01-07 12:00:21,106 tensorflow   WARNING  From /exp/Controller.py:226: The name tf.global_variables_initializer is deprecated. Please use tf.compat.v1.global_variables_initializer instead.
+
+2026-01-07 12:00:21,128 Controller   INFO     =============> Episode 0 for Controller
+2026-01-07 12:00:21,151 Controller   INFO     Training with dna: [[1 1 1 1 2 2 1 3 4 3 1 1]]
+2026-01-07 12:00:21,151 tensorflow   WARNING  From /exp/Utils/child_network.py:14: The name tf.placeholder_with_default is deprecated. Please use tf.compat.v1.placeholder_with_default instead.
+
+2026-01-07 12:00:21,379 Utils.cifar10_processor INFO     Dividing pixels by 255
+2026-01-07 12:00:21,675 Utils.cifar10_processor INFO     Loaded data from keras
+2026-01-07 12:00:23,144 tensorflow   WARNING  From /exp/Controller.py:130: The name tf.data.Iterator is deprecated. Please use tf.compat.v1.data.Iterator instead.
+
+2026-01-07 12:00:23,144 tensorflow   WARNING  From /exp/Controller.py:130: DatasetV1.output_types (from tensorflow.python.data.ops.dataset_ops) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use `tf.compat.v1.data.get_output_types(dataset)`.
+2026-01-07 12:00:23,144 tensorflow   WARNING  From /exp/Controller.py:130: DatasetV1.output_shapes (from tensorflow.python.data.ops.dataset_ops) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use `tf.compat.v1.data.get_output_shapes(dataset)`.
+2026-01-07 12:00:23,147 tensorflow   WARNING  From /usr/local/lib/python3.6/dist-packages/tensorflow_core/python/data/ops/iterator_ops.py:347: Iterator.output_types (from tensorflow.python.data.ops.iterator_ops) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use `tf.compat.v1.data.get_output_types(iterator)`.
+2026-01-07 12:00:23,147 tensorflow   WARNING  From /usr/local/lib/python3.6/dist-packages/tensorflow_core/python/data/ops/iterator_ops.py:348: Iterator.output_shapes (from tensorflow.python.data.ops.iterator_ops) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use `tf.compat.v1.data.get_output_shapes(iterator)`.
+2026-01-07 12:00:23,147 tensorflow   WARNING  From /usr/local/lib/python3.6/dist-packages/tensorflow_core/python/data/ops/iterator_ops.py:350: Iterator.output_classes (from tensorflow.python.data.ops.iterator_ops) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use `tf.compat.v1.data.get_output_classes(iterator)`.
+2026-01-07 12:00:23,148 Utils.child_network INFO     DNA is : [[1, 1, 1, 1], [2, 2, 1, 3], [4, 3, 1, 1]]
+2026-01-07 12:00:23,148 tensorflow   WARNING  From /exp/Utils/child_network.py:56: conv2d (from tensorflow.python.layers.convolutional) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use `tf.keras.layers.Conv2D` instead.
+2026-01-07 12:00:23,149 tensorflow   WARNING  From /usr/local/lib/python3.6/dist-packages/tensorflow_core/python/layers/convolutional.py:424: Layer.apply (from tensorflow.python.keras.engine.base_layer) is deprecated and will be removed in a future version.
+Instructions for updating:
+Please use `layer.__call__` method instead.
+2026-01-07 12:00:23,155 tensorflow   WARNING  From /exp/Utils/child_network.py:60: max_pooling2d (from tensorflow.python.layers.pooling) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use keras.layers.MaxPooling2D instead.
+2026-01-07 12:00:23,155 tensorflow   WARNING  From /exp/Utils/child_network.py:63: dropout (from tensorflow.python.layers.core) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use keras.layers.dropout instead.
+2026-01-07 12:00:23,179 tensorflow   WARNING  From /exp/Utils/child_network.py:67: flatten (from tensorflow.python.layers.core) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use keras.layers.flatten instead.
+2026-01-07 12:00:23,181 tensorflow   WARNING  From /exp/Utils/child_network.py:68: dense (from tensorflow.python.layers.core) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use keras.layers.Dense instead.
+2026-01-07 12:00:23,190 tensorflow   WARNING  From /exp/Controller.py:147: The name tf.train.AdamOptimizer is deprecated. Please use tf.compat.v1.train.AdamOptimizer instead.
+
+2026-01-07 12:00:25,569 Controller   INFO     Training child CNN child/0_0 for 100 epochs
+2026-01-07 12:03:34,786 Controller   INFO     	Epoch 0:	loss - 2.304667	accuracy - 0.100
+2026-01-07 12:12:26,135 Controller   INFO     	Epoch 1:	loss - 2.303313	accuracy - 0.103
+2026-01-07 12:29:48,606 Controller   INFO     	Epoch 2:	loss - 2.301730	accuracy - 0.108
+2026-01-07 12:56:55,038 Controller   INFO     	Epoch 3:	loss - 2.301060	accuracy - 0.114
+2026-01-07 13:33:52,401 Controller   INFO     	Epoch 4:	loss - 2.300268	accuracy - 0.112
+2026-01-07 14:21:11,132 Controller   INFO     	Epoch 5:	loss - 2.299124	accuracy - 0.115
+2026-01-07 15:19:31,349 Controller   INFO     	Epoch 6:	loss - 2.295574	accuracy - 0.117
+2026-01-07 16:28:10,939 Controller   INFO     	Epoch 7:	loss - 2.290253	accuracy - 0.119
+2026-01-07 17:47:01,951 Controller   INFO     	Epoch 8:	loss - 2.283061	accuracy - 0.122
+2026-01-07 19:15:58,438 Controller   INFO     	Epoch 9:	loss - 2.274492	accuracy - 0.131
+2026-01-07 20:55:18,128 Controller   INFO     	Epoch 10:	loss - 2.265239	accuracy - 0.139
+2026-01-07 22:45:22,772 Controller   INFO     	Epoch 11:	loss - 2.256033	accuracy - 0.148
+2026-01-08 00:46:48,314 Controller   INFO     	Epoch 12:	loss - 2.249753	accuracy - 0.153
+2026-01-08 02:58:41,574 Controller   INFO     	Epoch 13:	loss - 2.243822	accuracy - 0.160
+2026-01-08 05:20:57,783 Controller   INFO     	Epoch 14:	loss - 2.237152	accuracy - 0.165
+2026-01-08 07:53:50,143 Controller   INFO     	Epoch 15:	loss - 2.231998	accuracy - 0.167
+2026-01-08 10:36:54,585 Controller   INFO     	Epoch 16:	loss - 2.225901	accuracy - 0.171
+2026-01-08 13:30:16,930 Controller   INFO     	Epoch 17:	loss - 2.219707	accuracy - 0.178
+2026-01-08 16:33:37,062 Controller   INFO     	Epoch 18:	loss - 2.214606	accuracy - 0.179
+2026-01-08 19:47:27,100 Controller   INFO     	Epoch 19:	loss - 2.211008	accuracy - 0.184
+2026-01-08 23:11:44,897 Controller   INFO     	Epoch 20:	loss - 2.207224	accuracy - 0.187
+2026-01-09 02:46:11,039 Controller   INFO     	Epoch 21:	loss - 2.202575	accuracy - 0.189
+2026-01-09 06:30:59,997 Controller   INFO     	Epoch 22:	loss - 2.197285	accuracy - 0.192
+2026-01-09 10:27:42,826 Controller   INFO     	Epoch 23:	loss - 2.191209	accuracy - 0.195
+2026-01-09 14:35:53,639 Controller   INFO     	Epoch 24:	loss - 2.189091	accuracy - 0.197
+2026-01-09 18:56:01,817 Controller   INFO     	Epoch 25:	loss - 2.184532	accuracy - 0.198
+2026-01-09 23:27:19,792 Controller   INFO     	Epoch 26:	loss - 2.179830	accuracy - 0.197
+2026-01-10 04:09:43,881 Controller   INFO     	Epoch 27:	loss - 2.176955	accuracy - 0.201
+2026-01-10 09:07:12,024 Controller   INFO     	Epoch 28:	loss - 2.172100	accuracy - 0.203
+2026-01-10 14:09:50,509 Controller   INFO     	Epoch 29:	loss - 2.170137	accuracy - 0.202
+2026-01-10 19:23:39,343 Controller   INFO     	Epoch 30:	loss - 2.163796	accuracy - 0.207
+2026-01-11 00:48:52,261 Controller   INFO     	Epoch 31:	loss - 2.162040	accuracy - 0.208
+2026-01-11 06:28:20,936 Controller   INFO     	Epoch 32:	loss - 2.159147	accuracy - 0.207
+2026-01-11 12:12:56,808 Controller   INFO     	Epoch 33:	loss - 2.158412	accuracy - 0.207
+2026-01-11 18:17:04,731 Controller   INFO     	Epoch 34:	loss - 2.154038	accuracy - 0.208
+2026-01-12 00:45:49,550 Controller   INFO     	Epoch 35:	loss - 2.152657	accuracy - 0.207
+2026-01-12 07:08:15,822 Controller   INFO     	Epoch 36:	loss - 2.150340	accuracy - 0.210
+2026-01-12 13:34:44,619 Controller   INFO     	Epoch 37:	loss - 2.146313	accuracy - 0.211
+2026-01-12 20:11:58,427 Controller   INFO     	Epoch 38:	loss - 2.143620	accuracy - 0.211
+2026-01-13 03:23:38,973 Controller   INFO     	Epoch 39:	loss - 2.141751	accuracy - 0.212
+2026-01-13 10:21:25,278 Controller   INFO     	Epoch 40:	loss - 2.139282	accuracy - 0.213
+2026-01-13 17:30:03,101 Controller   INFO     	Epoch 41:	loss - 2.138139	accuracy - 0.216

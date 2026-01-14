@@ -37,9 +37,13 @@ class Controller(object):
         self.reward_history = []
         self.architecture_history = []
         self.divison_rate = 100
+
         self.training_metrics = []
+        self.search_metrics = [] 
+
         with self.graph.as_default():
             self.build_controller()
+
 
     def network_generator(self, nas_cell_hidden_state):
         # number of output units we expect from a NAS cell
@@ -187,6 +191,10 @@ class Controller(object):
                     "total_time_sec": time.time() - start_time
                 })
 
+                pd.DataFrame(self.training_metrics).to_parquet(
+                    "child_training_results.parquet", index=False
+                )
+
             # Validate and return reward
             logger.info("Finished training, now calculating validation accuracy")
             sess.run(valid_init_ops)
@@ -219,6 +227,10 @@ class Controller(object):
                 "total_time_sec": time.time() - start_time
             })
 
+            pd.DataFrame(self.training_metrics).to_parquet(
+                "child_training_results.parquet", index=False
+            )
+
         return np.mean(avg_val_acc)
 
     def train_controller(self):
@@ -248,6 +260,14 @@ class Controller(object):
 
             mean_reward = np.mean(episode_reward_buffer)
 
+            self.search_metrics.append({
+                "timestamp": pd.Timestamp.now(),
+                "epoch": episode,
+                "genotype_full": str(child_network_architecture.ravel()),
+                "valid_acc": float(mean_reward)
+            })
+
+
             self.reward_history.append(mean_reward)
             self.architecture_history.append(child_network_architecture)
             total_rewards += mean_reward
@@ -269,6 +289,6 @@ class Controller(object):
             logger.info('Episode: {} | Loss: {} | DNA: {} | Reward : {}'.format(
                 episode, loss, child_network_architecture.ravel(), mean_reward))
             
-            pd.DataFrame(self.training_metrics).to_parquet(
-                "child_training_results.parquet", index=False
+            pd.DataFrame(self.search_metrics).to_parquet(
+                "controller_search_results.parquet", index=False
             )
