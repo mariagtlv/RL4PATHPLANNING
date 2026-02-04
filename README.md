@@ -78,6 +78,108 @@ Implementation based on the REP framework.
 #### Results
 
 - All experimental results are stored in the `/rep_results` directory.
+  
+### DARTS
+
+#### `/DARTS`
+
+Implementation based on **Differentiable Architecture Search (DARTS)**.
+
+This module follows the original DARTS pipeline, which separates the search and evaluation phases using proxy models and weight sharing.
+
+#### Results
+
+- All experimental results are stored in the `/results` directory.
+
+#### Usage
+
+All commands are executed from the `DARTS` directory unless otherwise specified.
+
+**1. Architecture Search (Proxy Models)**
+
+Architecture search is performed using smaller proxy networks on CIFAR-10.
+
+```bash
+cd cnn
+python train_search.py --unrolled
+```
+
+**2. Architecture Evaluation (Full Model)**
+
+Once the architecture is selected, it is trained from scratch using the full-sized model.
+
+```bash
+cd cnn
+python train.py --auxiliary --cutout
+```
+
+**3. Evaluation of a Pretrained DARTS Model**
+
+A pretrained DARTS model can be evaluated on CIFAR-10 using:
+
+```bash
+cd cnn
+python test.py --auxiliary --model_path cifar10_model.pt
+```
+
+---
+
+### NAS-RL
+
+#### `/NAS-RL`
+
+Implementation of **Neural Architecture Search using Reinforcement Learning**, following the methodology described in the original NAS-RL literature (controller–child network framework).
+
+This implementation extends the original approach by incorporating additional evaluation metrics such as F1-score and robustness-aware rewards.
+
+#### Results
+
+- All experimental results are stored in `NAS-RL/results`.
+- During execution, intermediate results are also saved as `controller_search_results.parquet` and `child_training_results.parquet`. These files contain architecture genotypes, validation accuracy, F1-score, and reward values.
+
+#### Docker Support
+
+The NAS-RL module includes a **Dockerfile**, **docker-compose.yml**, and a dedicated `requirements.txt` file to ensure reproducibility.
+
+#### Build the Docker image
+
+```bash
+docker compose build
+```
+
+or, if using older Docker versions:
+
+```bash
+docker-compose build
+```
+
+#### Run the container
+
+```bash
+docker compose up
+```
+
+or:
+
+```bash
+docker-compose up
+```
+
+This will start the container with all required dependencies installed.
+
+#### Running NAS-RL
+
+Once inside the container (or if running locally with the correct environment):
+
+```bash
+python train.py
+```
+---
+
+## Notes
+
+* Each NAS approach (HA-ENAS, REP, DARTS, NAS-RL) follows its original methodological assumptions, but has been adapted to support multi-objective evaluation and large-scale experimental analysis.
+* Results across methods are stored separately to facilitate reproducibility and comparative analysis.
 
 ## Requirements
 
@@ -89,3 +191,6 @@ pip install -r file_name.txt
 
 - requirements.txt: general requirements.
 - requirements_ha_enas.txt: requirements for HA-ENAS.
+- requirements_rep.txt: requirements for REP.
+- requirements_darts.txt: requirements for DARTS.
+- requirements_nas_rl.txt: requirements for NAS_RL.
