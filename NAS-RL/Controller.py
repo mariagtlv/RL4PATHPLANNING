@@ -28,6 +28,13 @@ def ema(values):
     a = np.convolve(values, weights, mode="full")[:len(values)]
     return a[-1]
 
+def fgsm_attack(x, loss, eps=0.03):
+    grad = tf.gradients(loss, x)[0]
+    signed_grad = tf.sign(grad)
+    x_adv = tf.stop_gradient(x + eps * signed_grad)
+    return tf.clip_by_value(x_adv, 0.0, 1.0)
+
+
 class Controller(object):
 
     def __init__(self):
@@ -155,6 +162,15 @@ class Controller(object):
             correct = tf.equal(tf.argmax(pred_ops, 1), tf.argmax(labels, 1), name="correct")
             accuracy_ops = tf.reduce_mean(tf.cast(correct, tf.float32), name="accuracy")
 
+            # FGSM adversarial examples
+            x_adv = fgsm_attack(input_tensor, loss_ops)
+            logits_adv = child_network.build(x_adv)
+
+            pred_adv = tf.nn.softmax(logits_adv)
+            correct_adv = tf.equal(tf.argmax(pred_adv, 1), tf.argmax(labels, 1))
+            adv_accuracy_ops = tf.reduce_mean(tf.cast(correct_adv, tf.float32))
+
+
             initializer = tf.global_variables_initializer()
 
             # Training
@@ -183,13 +199,16 @@ class Controller(object):
                                                                                    np.mean(avg_loss), np.mean(avg_acc)))
                 self.training_metrics.append({
                     "timestamp": pd.Timestamp.now(),
-                    "epoch": epoch_idx,
+                    "epoch": "final",
                     "genotype_full": str(cnn_dna),
-                    "train_accuracy": float(np.mean(avg_acc)),
-                    "train_loss": float(np.mean(avg_loss)),
-                   "train_f1": float(train_f1), 
+                    "val_accuracy": float(np.mean(avg_val_acc)),
+                    "adv_accuracy": float(np.mean(avg_adv_acc)),
+                    "val_f1": float(val_f1),
+                    "adv_f1": float(adv_f1),
+                    "reward": float(reward),
                     "total_time_sec": time.time() - start_time
                 })
+
 
                 pd.DataFrame(self.training_metrics).to_parquet(
                     "child_training_results.parquet", index=False
@@ -203,20 +222,36 @@ class Controller(object):
             all_preds = []
             all_labels = []
 
+            avg_val_acc = []
+            avg_adv_acc = []
+
+            all_preds = []
+            all_labels = []
+            all_adv_preds = []
 
             for batch_idx in range(num_valid_batches):
-                valid_loss, valid_accuracy, preds, labs = sess.run(
-                    [loss_ops, accuracy_ops,
-                    tf.argmax(pred_ops, 1),
-                    tf.argmax(labels, 1)]
+                val_acc, adv_acc, preds, labs, adv_preds = sess.run(
+                    [
+                        accuracy_ops,
+                        adv_accuracy_ops,
+                        tf.argmax(pred_ops, 1),
+                        tf.argmax(labels, 1),
+                        tf.argmax(pred_adv, 1)
+                    ]
                 )
-                avg_val_loss.append(valid_loss)
-                avg_val_acc.append(valid_accuracy)
+
+                avg_val_acc.append(val_acc)
+                avg_adv_acc.append(adv_acc)
+
                 all_preds.extend(preds)
                 all_labels.extend(labs)
+                all_adv_preds.extend(adv_preds)
+
             logger.info("Valid loss - {:.6f}\tValid accuracy - {:.3f}".format(np.mean(avg_val_loss),
                                                                               np.mean(avg_val_acc)))
             val_f1 = f1_score(all_labels, all_preds, average="macro")
+            adv_f1 = f1_score(all_labels, all_adv_preds, average="macro")
+
             self.training_metrics.append({
                 "timestamp": pd.Timestamp.now(),
                 "epoch": "final",
@@ -231,7 +266,10 @@ class Controller(object):
                 "child_training_results.parquet", index=False
             )
 
-        return np.mean(avg_val_acc)
+        alpha = 0.5  # trade-off clean vs robust
+        reward = alpha * np.mean(avg_val_acc) + (1 - alpha) * np.mean(avg_adv_acc)
+        return reward
+
 
     def train_controller(self):
         with self.graph.as_default():
