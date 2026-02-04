@@ -45,6 +45,9 @@ print('EA_Search_surrogate')
 
 current_generation=0
 
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
 #NUEVO: guardar checkpoint para poder reanudar 
 def save_checkpoint(gen, Population, FunctionValue, FrontValue, CrowdDistance, exp_path):
     ckpt = {
@@ -140,6 +143,8 @@ def clean_acc(code):
     start_time = time.time()
     snet.eval()
     snet.set_net(code)
+    params = count_parameters(snet)
+
     snet.get_codings()
 
     freq = len(testloader) // test_size
@@ -157,7 +162,7 @@ def clean_acc(code):
 
     end_time = time.time()
     print('clean_acc = {:.2f}% \t time:{:.2f}s'.format(clean_top1_avg.avg, end_time - start_time))
-    return clean_top1_avg.avg
+    return clean_top1_avg.avg, params
 
 
 # 测试在两个攻击过的数据集上的平均rob_acc
@@ -200,7 +205,8 @@ def get_object_value(Pop, input):
         df = pd.read_parquet(parquet_path)
         for _, row in df.iterrows():
             key = tuple(row["genes"]) 
-            cache[key] = (row["clean_acc"], row["blackbox_acc"])
+            cache[key] = (row["clean_acc"], row["blackbox_acc"], row.get("params", None))
+
 
         print(f"[CACHE] Loaded {len(cache)} cached evaluations.")
 
@@ -211,12 +217,12 @@ def get_object_value(Pop, input):
         key = arch_key(p)
 
         if key in cache:
-            clean, black = cache[key]
+            clean, black, params = cache[key]
             output[i][0] = clean
             output[i][1] = black
             print(f"[CACHE HIT] Architecture already evaluated. clean={clean} black={black}")
         else:
-            clean = clean_acc(p)
+            clean,params = clean_acc(p)
             black = blackbox_rob_acc(p)
 
             output[i][0] = clean
@@ -228,6 +234,7 @@ def get_object_value(Pop, input):
                 "genes": p.tolist(),
                 "clean_acc": clean,
                 "blackbox_acc": black,
+                "params":params
             })
 
     if rows_to_add:

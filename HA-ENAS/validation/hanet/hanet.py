@@ -124,6 +124,17 @@ def HA_Net_A1(pretrained=False, **kwargs):
     print(model)
     return model
 
+def HA_Net_MyBest(pretrained=False, **kwargs):
+    encodings = [
+        [0, 2, 0],
+        [0, 0, 2, 2],
+        [0, 0, 0, 2, 0, 0],
+        [0, 0, 0]
+    ]
+    model = HaNet(encoding=encodings)
+    return model
+
+
 if __name__ == '__main__':
     model = HA_Net_A1(pretrained=False)
     print(model)

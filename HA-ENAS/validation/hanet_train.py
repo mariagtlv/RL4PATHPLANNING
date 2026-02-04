@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
-from hanet.hanet import HA_Net_A1
+from hanet.hanet import HA_Net_MyBest
 from utils import *
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
@@ -23,7 +23,7 @@ def main():
 
     print('==> Building model..' + fname + '!0n 224')
 
-    net = HA_Net_A1().to(device)
+    net = HA_Net_MyBest().to(device)
 
     print(net)
 

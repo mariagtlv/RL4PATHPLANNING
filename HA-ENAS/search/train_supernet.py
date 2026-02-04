@@ -12,12 +12,21 @@ from logger.logging import get_logger
 from logger.logging import make_path
 from logger import checkpoint
 
+from sklearn.metrics import f1_score
+import pandas as pd
+import os
+import pyarrow.parquet as pq
+import pyarrow as pa
+
 config.load_configs()
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # 创建工作路径和logger
 exp_path = make_path(cfg.SPACE.NAME)
 logger = get_logger(exp_path + '/logger.log')
+
+base_dir = os.getcwd()
+parquet_path = os.path.join(base_dir, "cache", "evaluated_individuals.parquet")
 
 
 def main():
@@ -142,16 +151,33 @@ class CamNASTraniner():
         self.model.eval()
 
         top1_avg, top5_avg, loss_avg = meter.AverageMeter(), meter.AverageMeter(), meter.AverageMeter()
+
+        all_preds = []
+        all_labels = []
+
         for cur_iter, (inputs, labels) in enumerate(self.test_loader):
             inputs, labels = inputs.to(device), labels.to(device)
+
             preds = self.model(inputs)
             loss = self.criterion(preds, labels)
-            top1_acc, top5_acc = meter.topk_acc(preds, labels, [1, 5])
-            top1_acc, top5_acc, loss = top1_acc.item(), top5_acc.item(), loss.item()
-            top1_avg.update(top1_acc, labels.size(0)), top5_avg.update(top5_acc, labels.size(0)), loss_avg.update(
-                loss, labels.size(0))
 
-        return top1_avg.avg, top5_avg.avg, loss_avg.avg
+            top1_acc, top5_acc = meter.topk_acc(preds, labels, [1, 5])
+
+            top1_acc, top5_acc, loss = top1_acc.item(), top5_acc.item(), loss.item()
+
+            top1_avg.update(top1_acc, labels.size(0))
+            top5_avg.update(top5_acc, labels.size(0))
+            loss_avg.update(loss, labels.size(0))
+
+            all_preds.append(torch.argmax(preds, dim=1).cpu())
+            all_labels.append(labels.cpu())
+
+        all_preds = torch.cat(all_preds).numpy()
+        all_labels = torch.cat(all_labels).numpy()
+
+        f1 = f1_score(all_labels, all_preds, average="macro")
+
+        return top1_avg.avg, top5_avg.avg, loss_avg.avg, f1
 
     # 测试多个网络，求出平均acc
     def validate(self, cur_epoch):
@@ -159,6 +185,7 @@ class CamNASTraniner():
         subnet_to_eval = {"convnet", "attnet", "mlpnet", "random", "random"}
         # subnet_to_eval = {"convnet"}
         top1_list, top5_list, loss_list = [], [], []
+        f1_list = []
 
         with  torch.no_grad():
             for net_id in subnet_to_eval:
@@ -171,13 +198,34 @@ class CamNASTraniner():
                 else:
                     self.model.set_random_net()
 
-                top1_acc, top5_acc, loss = self.test_epoch()
+                top1_acc, top5_acc, loss, f1 = self.test_epoch()
                 top1_list.append(top1_acc), top5_list.append(top5_acc), loss_list.append(loss)
+                
+                f1_list.append(f1)
 
         current_time = time.time()
         logger.info(
             'Test Loss {:.4f}\tAccuracy {:.2f}%\t\tTime {:.2f}s\n'
                 .format(list_mean(loss_list), float(list_mean(top1_list)), (current_time - start_time)))
+
+        mean_f1 = list_mean(f1_list)
+
+        row = {
+            "type": "supernet_epoch",
+            "epoch": cur_epoch,
+            "f1": mean_f1,
+            "timestamp": time.time()
+        }
+
+        df_new = pd.DataFrame([row])
+
+        if not os.path.exists(parquet_path):
+            pq.write_table(pa.Table.from_pandas(df_new), parquet_path)
+        else:
+            df_old = pd.read_parquet(parquet_path)
+            df_all = pd.concat([df_old, df_new], ignore_index=True)
+            df_all.to_parquet(parquet_path, index=False)
+
 
         if self.best_acc < list_mean(top1_list):
             self.best_acc = list_mean(top1_list)
